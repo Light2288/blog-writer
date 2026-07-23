@@ -6,7 +6,7 @@
 | **Type**      | feature                                                |
 | **Scope**     | `.opencode/agents/blog-writer.md` + `.opencode/skills/write-blog-article/SKILL.md` |
 | **Created**   | 2026-07-22 00:00:00                                    |
-| **Status**    | DRAFT                                                  |
+| **Status**    | IMPLEMENTED                                            |
 | **Parent**    | specs/blog-writer-project.md                           |
 | **Step**      | 4 of 5                                                 |
 
@@ -50,7 +50,9 @@ Workflow:
    fences with `lang:filename`, footnotes, `<video>`, images, standard
    markdown. Assemble the frontmatter with `draft: true`, per-language
    `title`/`summary` (English filled, Italian placeholder for now), `date`,
-   `lastmod`, `tags` (from the convention vocabulary), and `images`.
+   `lastmod`, `tags`, and `images`. Tag `id` and `label:{en,it}` values are
+   drawn from the tag vocabulary authored in `CONVENTIONS.md` (Step 03), not
+   invented ad hoc.
 5. **Iterate on English.** Write to disk, then ask a short `question`
    (summary + word count + file path — never embed the body). Apply requested
    changes by editing the file directly. Repeat until the user approves the
@@ -66,8 +68,9 @@ Workflow:
    `draft: true → false`.
 9. **Publish on command.** On explicit "publish <slug>": ensure
    `draft: false`, then move `drafts/<slug>.mdx` → `published/<slug>.mdx`
-   (using file tools or the permitted `mv`). Never auto-publish. If no draft
-   exists for the slug, warn and do nothing.
+   using only the permitted file tools or a permitted `mv` (per the Step 01
+   permissions — never a destructive command). Never auto-publish. If no
+   draft exists for the slug, warn and do nothing.
 
 ### Output format (must match exactly)
 
@@ -109,6 +112,8 @@ DRAFT marker (no separate Status table).
   overwriting.
 - **User asks the writer to edit a source project or to commit/push**: refuse
   per anti-hijack rules.
+- **Editing an already-published or previously-dated article**: refresh
+  `lastmod` to the edit date (leave the original `date` unchanged).
 
 ## Dependencies & Constraints
 
