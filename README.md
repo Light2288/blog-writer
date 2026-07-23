@@ -80,6 +80,38 @@ Editing `tracked-projects.txt` is **optional**:
 
 Use the allowlist to exclude sensitive projects.
 
+## Acceptance testing
+
+A single, repeatable end-to-end acceptance procedure lives in
+[`docs/acceptance.md`](docs/acceptance.md). It maps every acceptance criterion
+to a check, distinguishing automated mechanical checks from the manual
+agent-conversation script.
+
+Run the whole mechanical suite from the project root:
+
+```bash
+bash tests/run_all.sh
+```
+
+Or run individual verifiers:
+
+```bash
+bash tests/scaffold_check.sh          # step 01 scaffold + permissions structure
+bash tests/extract_topics_check.sh    # step 02 topic-extractor + extract-topics
+bash tests/conventions_check.sh       # step 03 conventions template + interview
+bash tests/blog_writer_check.sh       # step 04 blog-writer + write-blog-article
+bash tests/acceptance_check.sh        # step 05 system-wide static + coverage
+bash tests/permission_check.sh        # step 05 permission/destructive-command denial
+bash tests/redaction_check.sh         # step 05 deterministic redaction/flagging
+```
+
+The permission-boundary and destructive-command scenarios can additionally be
+proven against the live runtime (opt-in, consumes model calls):
+
+```bash
+ACCEPTANCE_RUNTIME=1 bash tests/permission_check.sh
+```
+
 ## Configuration and permissions
 
 The permission boundary for both agents lives in
