@@ -6,7 +6,7 @@
 | **Type**      | feature                                                |
 | **Scope**     | `.opencode/agents/topic-extractor.md` + `.opencode/skills/extract-topics/SKILL.md` |
 | **Created**   | 2026-07-22 00:00:00                                    |
-| **Status**    | DRAFT                                                  |
+| **Status**    | IMPLEMENTED                                            |
 | **Parent**    | specs/blog-writer-project.md                           |
 | **Step**      | 2 of 5                                                 |
 
@@ -37,7 +37,9 @@ Workflow:
 
 1. **Resolve time window.** Default last 7 days; accept overrides ("last
    month", explicit dates). Compute the window as Unix-ms bounds for the DB
-   query.
+   query. Derive the output filename from the ISO week containing the window's
+   **end** date (so a multi-week override like "last month" still yields a
+   single `topics-YYYY-Www.md`).
 2. **Resolve tracked projects.**
    - If `tracked-projects.txt` exists and is non-empty → use it as an
      allowlist (one directory per line; ignore blank lines and `#` comments).
@@ -54,20 +56,26 @@ Workflow:
 4. **Gather sessions.** Query `session` filtered on the indexed `time_updated`
    column and `directory`, collecting `id` (short), `title`, `slug`, `agent`,
    `time_created`, `time_updated`. Read only. For candidate topic sourcing,
-   optionally pull message/part text from `message.data`/`part.data` for the
-   matched sessions.
+   pull message/part text from `message.data`/`part.data` for the matched
+   sessions — this is what gives topics real substance beyond titles and commit
+   subjects. Cap the volume per session (e.g. a bounded number of parts or a
+   character budget) to keep context manageable.
 5. **Correlate by timestamp.** Relate commits and sessions that fall close
    together in time so a topic can cite both.
 6. **Redact.** Before writing anything, run the redaction filter over any
-   session-derived text: detect `client_secret`, `bearer`, `api_key`,
-   `token`, and long hex/base64 strings that look like secrets. Redact matches
-   in any quoted material, and mark the owning topic with a **Flagged** note
-   describing why.
+   session-derived text that would be written to the file: detect
+   `client_secret`, `bearer`, `api_key`, `token`, and long hex/base64 strings
+   that look like secrets. Redact matches in any quoted material, and mark the
+   owning topic with a **Flagged** note describing why. Redaction targets only
+   material destined for disk (quoted text); internal-only reasoning is not
+   written and needs no separate rule.
 7. **Synthesise candidate topics** using the template in the parent spec
    (title, why interesting, sources = sessions + commits, estimated depth,
    angle, optional Flagged note) plus the appendix of raw sources.
-8. **Write DRAFT.** Write `inputs/topics-YYYY-Www.md` (ISO week) with
-   `Status: DRAFT`.
+8. **Write DRAFT.** Write `inputs/topics-YYYY-Www.md` (ISO week of the window
+   end) with `Status: DRAFT`. If a topics file for that week already exists, ask
+   the user via `question` whether to overwrite or use a different name before
+   writing.
 9. **Ask a short question.** Summarise counts (projects, sessions, commits,
    topic count, any flagged) and point at the file. Never embed the file
    contents in the `question` call.
@@ -98,6 +106,12 @@ Workflow:
 - [ ] Approval via `question` flips `Status` to `FINAL`; the file body is
       never embedded in the question.
 - [ ] All DB access uses `sqlite3 -readonly` and filters on `time_updated`.
+- [ ] Topic substance is drawn from matched sessions' `message`/`part` text
+      (capped per session), not just titles and commit subjects.
+- [ ] For an override window spanning multiple ISO weeks, the filename uses the
+      ISO week of the window's end date.
+- [ ] Re-running for a week whose topics file already exists prompts the user
+      (via `question`) to overwrite or rename before writing.
 - [ ] The agent never writes outside `inputs/**` and never writes an article.
 
 ## Edge Cases & Error Handling
@@ -110,6 +124,8 @@ Workflow:
   write access.
 - **Zero topics found**: still write a DRAFT file stating the empty result
   rather than silently doing nothing.
+- **Topics file for the resolved week already exists**: ask the user whether to
+  overwrite or use a different name; do not clobber silently.
 - **Sensitive keyword detected**: Flagged note added; user decides in review.
 
 ## Dependencies & Constraints
