@@ -6,7 +6,7 @@
 | **Type**      | feature                                                |
 | **Scope**     | integration verification of the whole project          |
 | **Created**   | 2026-07-22 00:00:00                                    |
-| **Status**    | DRAFT                                                  |
+| **Status**    | IMPLEMENTED                                            |
 | **Parent**    | specs/blog-writer-project.md                           |
 | **Step**      | 5 of 5                                                 |
 
@@ -64,7 +64,8 @@ guarantee in the parent spec.
 14. **Destructive/remote git denied (must reject).** `git push`,
     `git commit --amend`, `rm -rf` are denied for both agents.
 15. **Read-only DB.** Assert all extractor DB access uses `sqlite3 -readonly`
-    and filters on `time_updated`.
+    and filters on the indexed `time_updated` column (no full-table scans of
+    `session`).
 
 ## Acceptance Criteria
 
@@ -84,6 +85,10 @@ guarantee in the parent spec.
 - **Fixtures vs. live data**: prefer fixtures/temp copies for the redaction and
   auto-discovery checks to keep tests deterministic and avoid depending on the
   live DB contents.
+- **Tracked project deleted from disk**: assert the extractor warns and skips
+  that project rather than aborting the run.
+- **Empty commit/session window for a project**: assert it is skipped silently
+  and noted in the topics appendix.
 
 ## Dependencies & Constraints
 
