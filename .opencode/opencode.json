@@ -1,0 +1,66 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "topic-extractor": {
+      "permission": {
+        "read": "allow",
+        "edit": {
+          "*": "deny",
+          "**": "deny",
+          "inputs/**": "allow"
+        },
+        "bash": {
+          "*": "ask",
+          "git *": "allow",
+          "sqlite3 * -readonly *": "allow",
+          "sqlite3 -readonly *": "allow",
+          "git push*": "deny",
+          "git commit --amend*": "deny",
+          "rm -rf*": "deny"
+        },
+        "external_directory": {
+          "~/**": "allow",
+          "$HOME/**": "allow",
+          "~/.local/share/opencode/**": "allow",
+          "~/.ssh/**": "deny",
+          "~/.aws/**": "deny",
+          "~/.gnupg/**": "deny",
+          "~/.config/**": "deny",
+          "**/.env": "deny"
+        }
+      }
+    },
+    "blog-writer": {
+      "permission": {
+        "read": "allow",
+        "edit": {
+          "*": "deny",
+          "**": "deny",
+          "drafts/**": "allow",
+          "inputs/**": "allow",
+          "published/**": "allow"
+        },
+        "bash": {
+          "*": "ask",
+          "git *": "allow",
+          "sqlite3 * -readonly *": "allow",
+          "sqlite3 -readonly *": "allow",
+          "mv drafts/* published/*": "allow",
+          "git push*": "deny",
+          "git commit --amend*": "deny",
+          "rm -rf*": "deny"
+        },
+        "external_directory": {
+          "~/**": "allow",
+          "$HOME/**": "allow",
+          "~/.local/share/opencode/**": "allow",
+          "~/.ssh/**": "deny",
+          "~/.aws/**": "deny",
+          "~/.gnupg/**": "deny",
+          "~/.config/**": "deny",
+          "**/.env": "deny"
+        }
+      }
+    }
+  }
+}

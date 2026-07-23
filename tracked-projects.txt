@@ -1,0 +1,23 @@
+# tracked-projects.txt — OPTIONAL allowlist for the topic-extractor agent.
+#
+# This file is an optional allowlist of project directories the
+# topic-extractor should consider when surfacing candidate blog topics.
+#
+# Usage:
+#   - One absolute directory path per line.
+#   - Lines beginning with "#" and blank lines are ignored.
+#
+# Behaviour:
+#   - If this file is PRESENT and NON-EMPTY (has at least one path line),
+#     it is treated as an allowlist: ONLY those projects are considered.
+#   - If this file is ABSENT or contains only comments/blank lines, the
+#     topic-extractor AUTO-DISCOVERS candidate projects from the opencode
+#     session database and confirms the discovered list with you (via a
+#     question) before extracting. It does NOT refuse to run.
+#
+# The allowlist is the primary privacy gate: exclude sensitive projects by
+# listing only the ones you want, rather than relying on auto-discovery.
+#
+# Example (uncomment and edit):
+# /Users/you/Projects/my-app
+# /Users/you/Projects/another-project
