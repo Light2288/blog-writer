@@ -4,9 +4,9 @@
 |---------------|--------------------------------------------------------|
 | **Title**     | CONVENTIONS.md Authoring                               |
 | **Type**      | feature                                                |
-| **Scope**     | `CONVENTIONS.md` + starter template                    |
+| **Scope**     | `CONVENTIONS.md` + `CONVENTIONS.template.md`           |
 | **Created**   | 2026-07-22 00:00:00                                    |
-| **Status**    | DRAFT                                                  |
+| **Status**    | IMPLEMENTED                                            |
 | **Parent**    | specs/blog-writer-project.md                           |
 | **Step**      | 3 of 5                                                 |
 
@@ -21,11 +21,18 @@ blog-writer's "missing conventions" guard behaves predictably.
 
 Two artefacts:
 
-1. A **starter template** for `CONVENTIONS.md` with clearly marked placeholders
-   — enough structure that a fresh clone has a valid file to edit, and enough
-   that the blog-writer can detect "unfilled placeholder" vs "real content".
-2. A completed `CONVENTIONS.md`, produced through an **interactive interview**
-   that captures my actual preferences.
+1. A **starter template** at `CONVENTIONS.template.md` (a distinct, pristine
+   reference file) with all sections present and every field an unfilled
+   placeholder — enough structure that a fresh clone has a valid file to copy
+   from, and enough that the blog-writer can detect "unfilled placeholder" vs
+   "real content". This template is delivered by this step and is not modified
+   by the interview.
+2. A completed `CONVENTIONS.md` at the project root, produced through an
+   **interactive interview** that captures my actual preferences. Step 01
+   (scaffold) stubs an all-placeholder `CONVENTIONS.md` so the blog-writer's
+   "missing conventions" guard has a target on a fresh clone; this step fills
+   it in place via the interview (seeding it from `CONVENTIONS.template.md`
+   when needed).
 
 ### Interview coverage
 
@@ -59,14 +66,18 @@ coverage above so the blog-writer can reference them deterministically:
 `Voice & Tone`, `Article Structure`, `Bilingual Policy`, `MDX Conventions`,
 `Frontmatter Conventions`, `Tag Vocabulary`, `Taboos`, `Examples`.
 
-Placeholders use an unambiguous marker (e.g. `<!-- TODO: ... -->` or
-`TODO:`), so the blog-writer can distinguish an unfilled template from real
-conventions.
+Placeholders use a single canonical marker — the HTML comment
+`<!-- TODO: ... -->` — so the blog-writer can distinguish an unfilled template
+from real conventions. The comment form is chosen deliberately: it renders
+invisibly, so a partially-filled `CONVENTIONS.md` never leaks placeholder text
+into a preview, and it is trivial to grep. A section is considered "unfilled"
+when its only content is one or more `<!-- TODO: ... -->` markers.
 
 ## Acceptance Criteria
 
-- [ ] A starter `CONVENTIONS.md` template exists with all sections and clearly
-      marked placeholders, valid on a fresh clone.
+- [ ] A starter `CONVENTIONS.template.md` exists as a distinct, pristine
+      reference with all sections present and every field an unfilled
+      `<!-- TODO: ... -->` placeholder; valid on a fresh clone.
 - [ ] The authoring flow interviews the user via `question` (one focused
       question at a time) across all coverage areas.
 - [ ] The resulting `CONVENTIONS.md` contains real content in each section
@@ -75,8 +86,9 @@ conventions.
       component vocabulary consistent with the parent spec.
 - [ ] The tag vocabulary section lists tags in the `{ id, label:{en,it} }`
       shape used by the article frontmatter.
-- [ ] The blog-writer (step 04) can detect an all-placeholder file and treat
-      it as "missing conventions".
+- [ ] The blog-writer (step 04) can detect a `CONVENTIONS.md` whose sections
+      contain only `<!-- TODO: ... -->` markers and treat it as "missing
+      conventions".
 
 ## Edge Cases & Error Handling
 
@@ -89,10 +101,13 @@ conventions.
 
 ## Dependencies & Constraints
 
-- Requires Step 01 (project scaffold; the placeholder may have been stubbed
-  there).
-- Written at the project root as `CONVENTIONS.md` (read by blog-writer every
-  run).
+- Requires Step 01 (project scaffold), which stubs an all-placeholder
+  `CONVENTIONS.md` at the project root. This step fills that file in place and
+  additionally delivers the distinct `CONVENTIONS.template.md` reference.
+- `CONVENTIONS.md` and `CONVENTIONS.template.md` both live at the project root
+  (`CONVENTIONS.md` is read by blog-writer every run).
+- The canonical placeholder marker is the HTML comment `<!-- TODO: ... -->`;
+  step 04's "missing conventions" detection depends on it.
 
 ## Out of Scope
 
