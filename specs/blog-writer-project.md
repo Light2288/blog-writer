@@ -60,8 +60,17 @@ manually from inside this project when the user wants.
     before extracting. The extractor does NOT refuse to run when the file is
     absent.
 - **Time window**: default "last 7 days"; overridable per run.
-- **Output**: a topics-candidates file at `inputs/topics-YYYY-Www.md`
-  (ISO week numbering, e.g. `inputs/topics-2026-W28.md`).
+- **Output**: a topics-candidates file at `inputs/topics-YYYY-MM-DD.md`
+  (the run date, e.g. `inputs/topics-2026-07-24.md`). The file also records
+  a `Generated: YYYY-MM-DD HH:MM` line, the resolved window, and the ISO week
+  of the window end, so re-running in the same ISO week produces a distinct
+  file rather than colliding.
+- **Exclude already-published topics**: before synthesising, the extractor drops
+  any candidate the user has already **published** an article about (drafts do
+  not count). It matches by `topic_key`, read from the ledger
+  `inputs/published-topics.md` (maintained by the blog-writer on publish) and,
+  as a fallback, from the `topic_key` frontmatter field of `published/*.mdx`.
+  Excluded candidates are listed in an "excluded (already published)" appendix.
 - **DRAFT-first**: writes the topics file with `Status: DRAFT` first, then
   flips it to `FINAL` only on the user's explicit approval via `question`.
 
@@ -84,7 +93,14 @@ manually from inside this project when the user wants.
   `draft: false` only on the user's explicit approval.
 - **Publish on command**: on the user's explicit instruction (e.g.
   "publish <slug>"), the blog-writer flips `draft: false` and moves
-  `drafts/<slug>.mdx` to `published/<slug>.mdx`. It never auto-publishes.
+  `drafts/<slug>.mdx` to `published/<slug>.mdx`. It never auto-publishes. On
+  publish it also appends the article's `topic_key` to the ledger
+  `inputs/published-topics.md`, so the topic-extractor stops resurfacing that
+  topic.
+- **Topic traceability**: every article carries a `topic_key` frontmatter field
+  (a stable kebab-case key matching the topic/slug). It is carried over from the
+  topics file when the topic came from one, or derived from the title for a
+  free-text topic.
 
 ### DRAFT-first pattern (both agents)
 
@@ -121,7 +137,7 @@ tool call — it can cause request termination.
 Rough template (the `extract-topics` skill may refine):
 
 ```text
-# Topic candidates — Week 2026-W28
+# Topic candidates — 2026-07-07 (ISO week 2026-W28)
 
 | Field       | Value                            |
 |-------------|----------------------------------|
@@ -141,9 +157,12 @@ Rough template (the `extract-topics` skill may refine):
 - **Estimated depth**: short / medium / long
 - **Angle**: <how to approach it — retrospective, tutorial, opinion,
   deep-dive, etc.>
+- **Evaluation**: a 0-10 score per dimension (Reader appeal, Technical depth,
+  Storytelling, Uniqueness, Publishability) plus the **Overall** average.
 - **Flagged**: <only present if sensitive content was detected — describe why>
 
 ### Topic 2: ...
+(topics ordered by descending Overall score)
 
 ## Appendix: raw sources
 - <bulleted list of sessions with titles>
@@ -154,9 +173,9 @@ Rough template (the `extract-topics` skill may refine):
 
 Bilingual MDX matching the target blog's format exactly: YAML frontmatter with
 per-language `title` and `summary`, `date`, `lastmod`, a `tags` list where each
-tag is `{ id, label: { en, it } }`, a `draft` boolean, and an `images` list;
-followed by the body split into `<Lang value="en">` and `<Lang value="it">`
-blocks.
+tag is `{ id, label: { en, it } }`, a `draft` boolean, a `topic_key` string, and
+an `images` list; followed by the body split into `<Lang value="en">` and
+`<Lang value="it">` blocks.
 
 ```text
 ---
@@ -172,6 +191,8 @@ summary:
 
 date: <YYYY-MM-DD>
 lastmod: <YYYY-MM-DD>
+
+topic_key: <kebab-case-key matching the topic / article slug>
 
 tags:
   - id: <kebab-id>
@@ -250,7 +271,7 @@ skill must include a redaction step:
 - [ ] A fresh clone of the project works after the user edits `CONVENTIONS.md`;
       editing `tracked-projects.txt` is optional (auto-discovery otherwise).
 - [ ] Running `topic-extractor` with the prompt "extract topics from last
-      week" produces `inputs/topics-YYYY-Www.md` with `Status: DRAFT`.
+      week" produces `inputs/topics-YYYY-MM-DD.md` with `Status: DRAFT`.
 - [ ] When `tracked-projects.txt` is absent, the extractor auto-discovers
       projects from the DB and confirms the list via `question` before writing.
 - [ ] The user can approve or request changes via the `question` tool;
@@ -333,8 +354,9 @@ skill must include a redaction step:
   many KB of markdown, and embedding them inside a `question` tool call has
   been shown to cause request termination. Always write the file, then ask a
   short question with just a summary.
-- The `topics-YYYY-Www.md` naming uses ISO week numbering (e.g.
-  `topics-2026-W28.md`).
+- The `topics-YYYY-MM-DD.md` naming uses the extraction run date (e.g.
+  `topics-2026-07-24.md`), so same-ISO-week re-runs produce distinct files. The
+  ISO week and window are recorded inside the file.
 - This project's directory is not itself a git repo by default; the agents do
   not require it to be one.
 - Implementation is decomposed into five spec-driven steps. See

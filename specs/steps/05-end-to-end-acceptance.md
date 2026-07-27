@@ -28,7 +28,7 @@ guarantee in the parent spec.
 1. **Fresh-clone readiness.** After filling `CONVENTIONS.md`, the project is
    usable with no other setup. `tracked-projects.txt` remains optional.
 2. **Extractor DRAFT.** Invoke `topic-extractor` with "extract topics from
-   last week". Assert `inputs/topics-YYYY-Www.md` is created with
+   last week". Assert `inputs/topics-YYYY-MM-DD.md` is created with
    `Status: DRAFT`, correct frontmatter table, candidate topics with correlated
    commit+session sources, and an appendix.
 3. **Auto-discovery path.** With `tracked-projects.txt` absent, assert the

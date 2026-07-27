@@ -20,7 +20,7 @@ with what I discussed in opencode sessions, without leaking secrets.
 
 A primary agent `topic-extractor` backed by an `extract-topics` skill that,
 when invoked (e.g. "extract topics from last week"), produces a DRAFT topics
-file at `inputs/topics-YYYY-Www.md` and drives it to FINAL on approval.
+file at `inputs/topics-YYYY-MM-DD.md` and drives it to FINAL on approval.
 
 ### Agent (`.opencode/agents/topic-extractor.md`)
 
@@ -37,9 +37,10 @@ Workflow:
 
 1. **Resolve time window.** Default last 7 days; accept overrides ("last
    month", explicit dates). Compute the window as Unix-ms bounds for the DB
-   query. Derive the output filename from the ISO week containing the window's
-   **end** date (so a multi-week override like "last month" still yields a
-   single `topics-YYYY-Www.md`).
+   query. Derive the output filename from the **date the extractor is run**
+   (today's local date), so re-running in the same ISO week yields a distinct
+   file: `topics-YYYY-MM-DD.md`. Record the resolved window and the ISO week of
+   the window end inside the file.
 2. **Resolve tracked projects.**
    - If `tracked-projects.txt` exists and is non-empty → use it as an
      allowlist (one directory per line; ignore blank lines and `#` comments).
@@ -72,8 +73,8 @@ Workflow:
 7. **Synthesise candidate topics** using the template in the parent spec
    (title, why interesting, sources = sessions + commits, estimated depth,
    angle, optional Flagged note) plus the appendix of raw sources.
-8. **Write DRAFT.** Write `inputs/topics-YYYY-Www.md` (ISO week of the window
-   end) with `Status: DRAFT`. If a topics file for that week already exists, ask
+8. **Write DRAFT.** Write `inputs/topics-YYYY-MM-DD.md` (the run date)
+   with `Status: DRAFT`. If a topics file for today's date already exists, ask
    the user via `question` whether to overwrite or use a different name before
    writing.
 9. **Ask a short question.** Summarise counts (projects, sessions, commits,
@@ -93,7 +94,7 @@ Workflow:
 ## Acceptance Criteria
 
 - [ ] Invoking with "extract topics from last week" produces
-      `inputs/topics-YYYY-Www.md` with `Status: DRAFT`.
+      `inputs/topics-YYYY-MM-DD.md` with `Status: DRAFT`.
 - [ ] With `tracked-projects.txt` present and non-empty, only listed projects
       are considered.
 - [ ] With `tracked-projects.txt` absent/empty, projects are auto-discovered

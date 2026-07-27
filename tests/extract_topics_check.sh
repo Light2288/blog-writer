@@ -88,16 +88,29 @@ assert_contains "$SKILL" "api_key" "SKILL lists api_key pattern"
 assert_contains "$SKILL" "bearer" "SKILL lists bearer pattern"
 assert_contains "$SKILL" "Flagged" "SKILL marks flagged topics"
 assert_contains "$SKILL" "redact.py" "SKILL references the redaction helper"
-# Step 8: DRAFT-first + ISO week of window end + overwrite prompt
+# Step 8: DRAFT-first + date-stamped filename + overwrite prompt
 assert_contains "$SKILL" "Status: DRAFT" "SKILL writes Status: DRAFT"
 assert_contains "$SKILL" "FINAL" "SKILL flips to FINAL on approval"
-assert_contains_ci "$SKILL" "ISO week" "SKILL uses ISO week naming"
-assert_contains_ci "$SKILL" "end" "SKILL derives filename from window end"
-assert_contains_ci "$SKILL" "overwrite" "SKILL prompts before overwriting an existing week file"
+assert_contains "$SKILL" "topics-YYYY-MM-DD.md" "SKILL uses date-stamped filenames"
+assert_contains_ci "$SKILL" "run date" "SKILL derives filename from the run date"
+assert_contains_ci "$SKILL" "iso week" "SKILL still records the ISO week inside the file"
+assert_contains_ci "$SKILL" "overwrite" "SKILL prompts before overwriting today's file"
 # Anti-embed rule
 assert_contains_ci "$SKILL" "never embed" "SKILL warns never to embed file body in question"
 # Empty result rule
 assert_contains_ci "$SKILL" "no topics" "SKILL still writes a DRAFT when no topics are found"
+# Step 5b: exclude already-published topics
+assert_contains "$SKILL" "published-topics.md" "SKILL reads the published-topics ledger"
+assert_contains "$SKILL" "topic_key" "SKILL matches topics by topic_key"
+assert_contains_ci "$SKILL" "already-published" "SKILL excludes already-published topics"
+assert_contains_ci "$SKILL" "drafts do" "SKILL excludes only published (not drafts)"
+# Step 8: Generated timestamp line
+assert_contains "$SKILL" "Generated" "SKILL records a Generated timestamp"
+# Step 7: evaluation + ordering defaults
+assert_contains_ci "$SKILL" "reader appeal" "SKILL scores the Reader appeal dimension"
+assert_contains_ci "$SKILL" "publishability" "SKILL scores the Publishability dimension"
+assert_contains_ci "$SKILL" "overall" "SKILL computes an Overall score"
+assert_contains_ci "$SKILL" "highest overall" "SKILL orders topics by descending Overall"
 
 echo "== Task 3: topic-extractor agent prompt =="
 assert_file "$AGENT"

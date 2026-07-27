@@ -101,6 +101,9 @@ assert_contains "$SKILL" "draft: false" "SKILL flips draft: to false on approval
 # Step 9: publish on command.
 assert_contains_ci "$SKILL" "publish" "SKILL publishes on explicit command"
 assert_contains "$SKILL" "published/" "SKILL moves the file into published/"
+# Topic traceability: topic_key frontmatter + ledger append on publish.
+assert_contains "$SKILL" "topic_key" "SKILL writes a topic_key frontmatter field"
+assert_contains "$SKILL" "published-topics.md" "SKILL appends to the published-topics ledger on publish"
 # DRAFT-first discipline: never embed the body in a question.
 assert_contains_ci "$SKILL" "never embed" "SKILL warns never to embed the body in a question"
 

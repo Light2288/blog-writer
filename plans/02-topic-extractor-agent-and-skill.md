@@ -18,7 +18,7 @@ Step 01 laid down the project scaffold: permissions in
 prompt body and authors the `extract-topics` skill it loads: auto-discover (or
 allowlist) tracked projects, `git log` each, query opencode sessions with
 `sqlite3 -readonly`, correlate commits and sessions by timestamp, redact
-secret-like strings, and write a DRAFT `inputs/topics-YYYY-Www.md` that is
+secret-like strings, and write a DRAFT `inputs/topics-YYYY-MM-DD.md` that is
 flipped to FINAL only on explicit approval. The agent never writes an article.
 
 ## Branch Strategy
@@ -133,7 +133,7 @@ the agent follows.
       `token`, and long hex/base64 secret-like strings; redact matches and
       mark the owning topic **Flagged**.
    7. **Synthesise candidate topics** — use the parent-spec template.
-   8. **Write DRAFT** — `inputs/topics-YYYY-Www.md` (ISO week of window end)
+   8. **Write DRAFT** — `inputs/topics-YYYY-MM-DD.md` (the run date)
       with `Status: DRAFT`; if that file already exists, ask via `question`
       whether to overwrite or rename before writing.
    9. **Ask a short question** — summarise counts (projects, sessions, commits,
@@ -317,7 +317,7 @@ Recommended order: 1 → 2 → 3 → 4.
 3. **Runtime (manual, after restarting opencode)**: invoke `topic-extractor`
    with "extract topics from last week"; confirm it auto-discovers (or uses the
    allowlist), asks for project confirmation when auto-discovering, writes
-   `inputs/topics-YYYY-Www.md` with `Status: DRAFT`, summarises via `question`
+   `inputs/topics-YYYY-MM-DD.md` with `Status: DRAFT`, summarises via `question`
    without embedding the body, and flips to `FINAL` on approval.
 4. **Runtime**: confirm all `sqlite3` calls in the transcript use `-readonly`,
    and that asking the agent to "write the article" is refused.

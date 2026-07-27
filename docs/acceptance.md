@@ -89,7 +89,7 @@ usable with no other setup; `tracked-projects.txt` remains optional.
 ### Scenario 2 — Extractor DRAFT
 
 Invoke `topic-extractor`: *"extract topics from last week"*.
-**Observe**: `inputs/topics-YYYY-Www.md` is created with `Status: DRAFT`, a
+**Observe**: `inputs/topics-YYYY-MM-DD.md` is created with `Status: DRAFT`, a
 correct frontmatter table, candidate topics with correlated commit + session
 sources, and an appendix.
 
@@ -182,7 +182,7 @@ read-only SQL assertion in `bash tests/acceptance_check.sh`.
 | Scenario | Check | Parent acceptance criterion |
 |----------|-------|-----------------------------|
 | 1 Fresh-clone readiness | `acceptance_check.sh` + manual | Fresh clone works after editing `CONVENTIONS.md`; `tracked-projects.txt` optional |
-| 2 Extractor DRAFT | manual + `extract_topics_check.sh` | Running topic-extractor produces `topics-YYYY-Www.md` with `Status: DRAFT` |
+| 2 Extractor DRAFT | manual + `extract_topics_check.sh` | Running topic-extractor produces `topics-YYYY-MM-DD.md` with `Status: DRAFT` |
 | 3 Auto-discovery | manual + `extract_topics_check.sh` | Absent allowlist → auto-discovers and confirms via `question` |
 | 4 Allowlist | manual | Allowlist present → only listed projects considered |
 | 5 Redaction/flagging | `redaction_check.sh` | Sensitive-keyword detection flags matching topics |

@@ -63,6 +63,13 @@ Derive a kebab-case `<slug>` from the working title and set the target path
 `drafts/<slug>.mdx`. If a draft or published file already exists for that slug,
 **ask before overwriting** — never clobber silently.
 
+When the topic came from an `inputs/topics-*.md` file, carry over its
+**`topic_key`** (the topics file records one per topic). Otherwise derive the
+`topic_key` from the working title with the **same** kebab-case rule as the slug
+(lowercase, spaces → `-`, strip punctuation, collapse repeats), so a free-text
+topic still gets a stable key. This key is what the `extract-topics` skill uses
+to avoid resurfacing already-published topics.
+
 ### 4. Draft the English body first
 
 Write the article body in English following `CONVENTIONS.md` (structure, voice,
@@ -70,6 +77,8 @@ taboos), using **only** the allowed MDX component vocabulary (see
 [Output format](#output-format)). Assemble the frontmatter with:
 
 - `draft: true` — the on-disk DRAFT marker (there is no separate Status table).
+- `topic_key` — the stable kebab-case key from step 3, so published articles are
+  traceable back to their topic (used by `extract-topics` for exclusion).
 - per-language `title` and `summary` — English filled in; Italian left as a
   short placeholder for now.
 - `date` and `lastmod` — today's date.
@@ -114,7 +123,18 @@ On an explicit instruction like **"publish <slug>"**:
 - ensure the frontmatter is `draft: false` (flip it if needed); then
 - move `drafts/<slug>.mdx` → `published/<slug>.mdx` using only the permitted
   file tools or the permitted `mv drafts/* published/*` command — **never a
-  destructive command**.
+  destructive command**; then
+- **record the topic in the ledger** so `extract-topics` stops resurfacing it.
+  Append one line to `inputs/published-topics.md` (create the file with a
+  heading if it does not exist), in the form:
+
+  ```text
+  - <topic_key> | <slug> | published 2026-07-26
+  ```
+
+  Use the article's `topic_key` from its frontmatter and today's date. If a line
+  for that `topic_key` already exists, do not duplicate it. This ledger lives in
+  `inputs/**`, which the blog-writer is permitted to write.
 
 Never auto-publish. If no draft exists for the requested slug, warn the user
 and do nothing.
@@ -123,9 +143,9 @@ and do nothing.
 
 Bilingual MDX matching the target blog's format exactly: YAML frontmatter with
 per-language `title` and `summary`, `date`, `lastmod`, a `tags` list where each
-tag is `{ id, label: { en, it } }`, a `draft` boolean, and an `images` list;
-followed by the body split into `<Lang value="en">` and `<Lang value="it">`
-blocks.
+tag is `{ id, label: { en, it } }`, a `draft` boolean, a `topic_key` string, and
+an `images` list; followed by the body split into `<Lang value="en">` and
+`<Lang value="it">` blocks.
 
 ```text
 ---
@@ -141,6 +161,8 @@ summary:
 
 date: <YYYY-MM-DD>
 lastmod: <YYYY-MM-DD>
+
+topic_key: <kebab-case-key matching the topic / article slug>
 
 tags:
   - id: <kebab-id>

@@ -1,0 +1,18 @@
+# Produced content is kept LOCAL only and never committed to this repo.
+# The author reviews articles here, then copy-pastes the text into the actual
+# blog project. Only the folder structure (.gitkeep) is tracked.
+
+# Topic candidate files + the published-topics ledger
+inputs/*
+!inputs/.gitkeep
+
+# Article drafts
+drafts/*
+!drafts/.gitkeep
+
+# Published articles (moved here on the publish command)
+published/*
+!published/.gitkeep
+
+# macOS cruft
+.DS_Store

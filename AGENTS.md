@@ -25,7 +25,7 @@ manually from inside this project when the user wants.
   transcripts from `~/.local/share/opencode/opencode.db` (queried with
   `sqlite3 -readonly`) — correlates them by timestamp, redacts obvious
   secrets, and writes a DRAFT candidate-topics file to
-  `inputs/topics-YYYY-Www.md`. It **never writes an article**, even if asked.
+  `inputs/topics-YYYY-MM-DD.md`. It **never writes an article**, even if asked.
 
 - **blog-writer** (the writer): reads `CONVENTIONS.md` every run (and refuses
   to draft without at least a placeholder), takes a topic from the current

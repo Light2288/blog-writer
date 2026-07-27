@@ -5,14 +5,14 @@ description: >-
   candidate blog topics from recent activity (e.g. "extract topics from last
   week"). Analyses git history and opencode session transcripts across tracked
   projects, correlates them by timestamp, redacts secrets, and writes a DRAFT
-  topics file to inputs/topics-YYYY-Www.md.
+  topics file to inputs/topics-YYYY-MM-DD.md.
 ---
 
 # Extract Topics
 
 Turn recent activity across the user's projects — git commits plus opencode
 session transcripts — into a reviewed list of candidate blog topics. The output
-is a single DRAFT file at `inputs/topics-YYYY-Www.md` that is flipped to FINAL
+is a single DRAFT file at `inputs/topics-YYYY-MM-DD.md` that is flipped to FINAL
 only on the user's explicit approval.
 
 This skill is **read-only** with respect to every source: it only ever observes
@@ -32,11 +32,12 @@ Default to the **last 7 days**. Accept overrides from the user's phrasing:
 Compute the window as an inclusive pair of Unix-**millisecond** bounds
 `(lo, hi]` for the database query (opencode stores timestamps in ms).
 
-Derive the output filename from the **ISO week that contains the window's end
-date**. So a 7-day default window and a multi-week override like "last month"
-both resolve to a single `topics-YYYY-Www.md` (e.g. `topics-2026-W30.md`).
-Use the ISO-8601 week number (weeks start Monday; the week owning the end date
-wins).
+Derive the output filename from the **date the extraction is run** (today's
+local date): `inputs/topics-YYYY-MM-DD.md` (e.g. `topics-2026-07-24.md`). This
+gives every run its own file, so running twice in the same ISO week does not
+collide. Record the resolved window and the ISO week that contains the window's
+end date **inside** the file (in the header table and a `Generated:` line), not
+in the filename.
 
 ### 2. Resolve tracked projects (allowlist or auto-discover)
 
@@ -118,6 +119,44 @@ project, so a topic can cite both. Correlation is heuristic (time proximity);
 **be transparent** in each topic's Sources about exactly which commits and
 sessions you linked.
 
+### 5b. Exclude already-published topics
+
+Before synthesising, drop any candidate the user has **already published an
+article about**, so re-running the extractor next day/week does not resurface
+finished work. Only **published** articles exclude a topic — drafts do **not**
+(an abandoned draft may legitimately resurface).
+
+Two exclusion sources (a candidate is excluded if it matches **either**):
+
+1. **The ledger** `inputs/published-topics.md` — a running list the
+   `blog-writer` appends to on every publish. Each entry records the
+   `topic_key`, the published article slug, and the date. Read it if present:
+
+   ```bash
+   [ -f inputs/published-topics.md ] && cat inputs/published-topics.md
+   ```
+
+2. **Published article frontmatter** — as a fallback (e.g. the ledger was lost),
+   scan `published/*.mdx` for a `topic_key:` field:
+
+   ```bash
+   grep -h '^topic_key:' published/*.mdx 2>/dev/null | sed 's/^topic_key:[[:space:]]*//'
+   ```
+
+**Matching.** Compute each candidate's `topic_key` (see below) and exclude it if
+that key appears in either source. As a secondary safety net, also skip a
+candidate whose derived key is a near-duplicate of a published one (same key
+after normalising). When in doubt, keep the topic but add a short note that it
+*may* overlap a published article, and let the user decide in review.
+
+**`topic_key` derivation (shared with `write-blog-article`).** Kebab-case the
+topic's working title: lowercase, spaces → `-`, strip punctuation, collapse
+repeats. This must match the article slug the writer derives from the same
+title, so the two skills agree without extra bookkeeping.
+
+Record what you excluded in the file's **Excluded** appendix section (topic key
++ why), so the user can see nothing was silently dropped.
+
 ### 6. Redact secrets
 
 Before writing **anything to disk**, run the redaction filter over every piece
@@ -145,20 +184,48 @@ keep it.
 
 Produce the topics using the template below (from the parent spec): a working
 title, why it is interesting, Sources (sessions + commits), estimated depth,
-angle, and an optional **Flagged** note — plus an appendix listing the raw
-sources.
+angle, an **Evaluation** block, and an optional **Flagged** note — plus an
+appendix listing the raw sources.
+
+**Evaluation (always included).** Score every topic across these **five
+dimensions**, each `0-10`, and compute the **Overall** as their average
+(rounded to one decimal). This is the extractor's subjective opinion, meant to
+help the user triage during review — not a hard gate.
+
+- **Reader appeal** — how many readers would genuinely want to read it.
+- **Technical depth** — how much substantive engineering there is to unpack.
+- **Storytelling** — how well it fits the user's first-person, ironic narrative
+  voice (see `CONVENTIONS.md`).
+- **Uniqueness** — how fresh/differentiated it is versus what already exists.
+- **Publishability** — how easy it is to write safely and well; **lower this
+  score when a topic is Flagged** or otherwise constrained by confidentiality
+  (Taboos), since that adds friction/risk.
+
+Render the evaluation as a compact markdown table per topic (dimension | score),
+followed by the **Overall** row. Add a short legend near the top of the file
+explaining the dimensions.
+
+**Ordering.** Sort the candidate topics **from the highest Overall score to the
+lowest** before writing the file (ties broken by Reader appeal, then by the
+extractor's judgement). The numbering (Topic 1, Topic 2, ...) follows this
+sorted order, so "write about topic 1" always refers to the highest-rated
+candidate.
 
 ### 8. Write the DRAFT file
 
-Write `inputs/topics-YYYY-Www.md` (ISO week of the window end, per step 1) with
-`Status: DRAFT`.
+Write `inputs/topics-YYYY-MM-DD.md` (the run date, per step 1) with
+`Status: DRAFT`. Include a **`Generated:`** row in the header table recording the
+exact date and time the file was produced (`YYYY-MM-DD HH:MM`, local time), plus
+the resolved `Window` and the `ISO week` of the window end, so the chronology and
+scope are clear from inside the file.
 
-- If a topics file for that week **already exists**, ask the user via
-  `question` whether to **overwrite** it or use a different name, before
-  writing. Never clobber silently.
-- If **no topics** were found, still write a DRAFT file that plainly states the
-  empty result (e.g. "No candidate topics found in this window") rather than
-  silently doing nothing.
+- If a topics file for **today's date** already exists (you already ran the
+  extractor today), ask the user via `question` whether to **overwrite** it or
+  use a different name, before writing. Never clobber silently.
+- If **no topics** were found (or every candidate was excluded as
+  already-published), still write a DRAFT file that plainly states the result
+  (e.g. "No new candidate topics found in this window") rather than silently
+  doing nothing.
 
 ### 9. Ask a short question
 
@@ -204,30 +271,58 @@ during review.
 ## Topics file template
 
 ```text
-# Topic candidates — Week 2026-W30
+# Topic candidates — 2026-07-26 (ISO week 2026-W30)
 
 | Field       | Value                            |
 |-------------|----------------------------------|
 | Window      | 2026-07-20 to 2026-07-26         |
+| ISO week    | 2026-W30                         |
+| Generated   | 2026-07-26 14:30                 |
 | Projects    | app-scrutatore, certflow, blog   |
 | Sessions    | 12 (see appendix)                |
 | Commits     | 34 (see appendix)                |
 | Status      | DRAFT                            |
 
+> **Evaluation legend.** Each topic is scored 0-10 across five dimensions and
+> the **Overall** is their average (the extractor's subjective opinion, to aid
+> triage — not a hard gate). Dimensions: **Reader appeal** (would readers want
+> it), **Technical depth** (substance to unpack), **Storytelling** (fit with the
+> first-person, ironic voice in `CONVENTIONS.md`), **Uniqueness** (freshness vs.
+> what exists), **Publishability** (ease of writing it safely — lowered when a
+> topic is Flagged / confidentiality-constrained). Topics are ordered from
+> highest to lowest Overall.
+
 ## Candidate topics
 
 ### Topic 1: <catchy working title>
+- **Topic key**: <kebab-case-key derived from the title>
 - **Why interesting**: <1-2 sentences>
 - **Sources**:
   - Sessions: <session-id-short>, <session-id-short>
   - Commits: <project>@<sha-short>, ...
 - **Estimated depth**: short / medium / long
 - **Angle**: <retrospective, tutorial, opinion, deep-dive, etc.>
+- **Evaluation**:
+
+  | Dimension       | Score |
+  |-----------------|-------|
+  | Reader appeal   | <0-10> |
+  | Technical depth | <0-10> |
+  | Storytelling    | <0-10> |
+  | Uniqueness      | <0-10> |
+  | Publishability  | <0-10> |
+  | **Overall**     | **<avg>** |
+
 - **Flagged**: <only if secret-like content was detected — describe why>
 
 ### Topic 2: ...
+(topics appear in descending Overall-score order)
 
 ## Appendix: raw sources
 - <bulleted list of sessions with titles>
 - <bulleted list of commits with subjects>
+
+## Appendix: excluded (already published)
+- <topic-key> — matched published article <slug> (<source: ledger|frontmatter>)
+- (empty if nothing was excluded)
 ```

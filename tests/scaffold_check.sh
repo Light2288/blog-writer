@@ -58,10 +58,15 @@ if [ -f tracked-projects.txt ]; then
   fi
 fi
 
-echo "== Task 2: placeholder CONVENTIONS.md =="
+echo "== Task 2: CONVENTIONS.md present and non-empty =="
 assert_file CONVENTIONS.md
 assert_nonempty CONVENTIONS.md
-assert_contains CONVENTIONS.md "placeholder" "CONVENTIONS.md marked as placeholder/stub"
+# NOTE: step 01 seeded CONVENTIONS.md as an all-placeholder stub, but the
+# author-conventions interview (step 03, run for real) replaces those markers
+# with the user's actual conventions. So we no longer assert the stub word
+# "placeholder" here — that would fail once conventions are authored. The
+# pristine placeholder markers still live in CONVENTIONS.template.md, which
+# conventions_check.sh verifies separately.
 
 echo "== Task 3: AGENTS.md + README.md =="
 assert_file AGENTS.md

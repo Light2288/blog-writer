@@ -32,7 +32,7 @@ your setup so the DB lives at that path.
 
 | Path                 | Purpose                                             |
 |----------------------|-----------------------------------------------------|
-| `inputs/`            | Candidate-topic files (`topics-YYYY-Www.md`)        |
+| `inputs/`            | Candidate-topic files (`topics-YYYY-MM-DD.md`) + the `published-topics.md` ledger |
 | `drafts/`            | Article drafts (`<slug>.mdx`, `draft: true`)        |
 | `published/`         | Published articles (moved here on your command)     |
 | `CONVENTIONS.md`     | Your writing style/voice (authored in step 03)      |
@@ -50,11 +50,18 @@ Ask it to extract topics, e.g. *"extract topics from last week"*. It:
 
 1. Determines which projects to consider (see the allowlist below).
 2. Reads git commit history and opencode session transcripts
-   (`sqlite3 -readonly`, filtered on the indexed `time_updated` column),
+   (`sqlite3 -readonly`, filtered on the `time_updated` column),
    correlates them by timestamp, and redacts obvious secrets.
-3. Writes a DRAFT topics file to `inputs/topics-YYYY-Www.md` (ISO week
-   numbering) and asks you to review it. On your approval it flips
-   `Status: DRAFT` to `Status: FINAL`.
+3. Skips any topic you have **already published** an article about (matched by
+   `topic_key` via the `inputs/published-topics.md` ledger and published
+   articles' frontmatter), so re-running it does not resurface finished work.
+   Drafts do not count — only published articles.
+4. Scores each candidate across five dimensions (Reader appeal, Technical depth,
+   Storytelling, Uniqueness, Publishability), orders them by the resulting
+   Overall score, and writes a DRAFT topics file to `inputs/topics-YYYY-MM-DD.md`
+   (named by the run date — so same-week re-runs don't collide — with the ISO
+   week, window, and a `Generated:` timestamp recorded inside). On your approval
+   it flips `Status: DRAFT` to `Status: FINAL`.
 
 It never writes an article itself.
 
@@ -63,10 +70,11 @@ It never writes an article itself.
 Ask it to write about a topic, e.g. *"write about topic 2"* or a free-text
 subject. It reads `CONVENTIONS.md`, drafts the **English body first** and
 iterates with you, then translates to Italian and assembles a single
-bilingual `drafts/<slug>.mdx` with frontmatter `draft: true`. On your
-explicit *"publish &lt;slug&gt;"* command it flips `draft: false` and moves the
-file to `published/<slug>.mdx`. It never edits source projects and never
-commits or pushes.
+bilingual `drafts/<slug>.mdx` with frontmatter `draft: true` and a stable
+`topic_key`. On your explicit *"publish &lt;slug&gt;"* command it flips
+`draft: false`, moves the file to `published/<slug>.mdx`, and records the
+`topic_key` in `inputs/published-topics.md` so the topic-extractor won't
+resurface it. It never edits source projects and never commits or pushes.
 
 ## The optional `tracked-projects.txt` allowlist
 
