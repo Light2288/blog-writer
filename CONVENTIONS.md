@@ -40,6 +40,12 @@
   example: going through my own git commits is "like dumpster-diving"; a messy
   series of commits reads "fix", "fix again", "ok now really fix". The narrator
   is a little hapless, and that is part of the joke.
+- **Parentheses**: use them naturally and fairly often in both English and
+  Italian article bodies for brief ironic comments, qualifications, and
+  self-deprecating afterthoughts. This is not a quota. Do not stack parenthetical
+  asides or bury the main point inside them; rewrite or omit an aside when
+  clarity suffers. Use parentheses in titles only rarely and purposefully (and
+  never when they make the title cumbersome).
 - **Rhythm**: **varied** (short, direct sentences for the key points; longer,
   more articulated ones when something needs depth).
 
