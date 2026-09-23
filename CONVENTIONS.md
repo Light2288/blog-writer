@@ -182,7 +182,8 @@ Usage preferences:
   following the Bilingual Policy (IT adapted, not translated literally).
 - **`date` / `lastmod`**: `date` = article creation date (never changes);
   `lastmod` = last-edit date, **updated on every subsequent edit**. On first
-  draft they coincide.
+  draft they coincide. Publishing also updates `lastmod` to the current local
+  date while leaving `date` unchanged.
 - **`images`**: **empty list by default**; add images only when there actually
   are some (no mandatory hero image).
 - **`draft`**: starts at **`true`**; flipped to **`false`** only on an explicit

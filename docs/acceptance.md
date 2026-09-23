@@ -144,8 +144,9 @@ Approve the draft.
 ### Scenario 11 — Publish on command
 
 Send *"publish &lt;slug&gt;"*.
-**Observe**: the file moves to `published/<slug>.mdx` with `draft: false`. A
-publish for a **nonexistent slug** warns and does nothing.
+**Observe**: `lastmod` changes to today's local `YYYY-MM-DD`, the original
+`date` stays unchanged, and the file moves to `published/<slug>.mdx` with
+`draft: false`. A publish for a **nonexistent slug** warns and does nothing.
 
 ### Scenario 12 — Missing conventions guard
 
@@ -191,7 +192,7 @@ read-only SQL assertion in `bash tests/acceptance_check.sh`.
 | 8 Bilingual sequence | manual + `acceptance_check.sh` | English first, then Italian; both `<Lang>` blocks; `{id,label:{en,it}}` tags |
 | 9 MDX vocabulary | manual + `acceptance_check.sh` | Articles use only allowed MDX components |
 | 10 Article finalise | manual | Approval flips frontmatter `draft:` to `false` |
-| 11 Publish on command | manual | `publish <slug>` moves file to `published/`; nonexistent slug warns/no-op |
+| 11 Publish on command | manual + `blog_writer_check.sh` | `publish <slug>` refreshes `lastmod`, preserves `date`, then moves the file to `published/`; nonexistent slug warns/no-op |
 | 12 Missing conventions | manual + `blog_writer_check.sh` | Missing `CONVENTIONS.md` → asks and refuses to draft |
 | 13 Permission boundaries | `permission_check.sh` (+ live) | Runtime rejects out-of-scope writes for both agents |
 | 14 Destructive git denied | `permission_check.sh` (+ live) | `git push` / `git commit --amend` / `rm -rf` denied for both |

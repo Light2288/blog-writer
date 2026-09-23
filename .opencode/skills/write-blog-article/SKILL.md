@@ -120,6 +120,8 @@ publish command.
 
 On an explicit instruction like **"publish <slug>"**:
 
+- set `lastmod` to today's local date in `YYYY-MM-DD` format while leaving the
+  original `date` unchanged;
 - ensure the frontmatter is `draft: false` (flip it if needed); then
 - move `drafts/<slug>.mdx` → `published/<slug>.mdx` using only the permitted
   file tools or the permitted `mv drafts/* published/*` command — **never a
@@ -223,6 +225,8 @@ set.**
   confirm the English body first, then translate (steps 5–6).
 - **Editing an already-published or previously-dated article** — refresh
   `lastmod` to the edit date and leave the original `date` unchanged.
+- **Publishing an article** — refresh `lastmod` to the publication date and
+  leave the original `date` unchanged before moving it to `published/`.
 - **Publish requested for a slug with no draft** — warn and do nothing
   (step 9).
 - **User asks the writer to edit a source project or to commit/push** — refuse

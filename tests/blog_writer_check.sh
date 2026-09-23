@@ -68,6 +68,22 @@ assert_absent_ci() {
   fi
 }
 
+assert_text_contains() {
+  if [[ "$1" == *"$2"* ]]; then
+    pass "$3"
+  else
+    fail "$3 (expected '$2')"
+  fi
+}
+
+assert_text_ordered() {
+  if [[ "$1" == *"$2"*"$3"* ]]; then
+    pass "$4"
+  else
+    fail "$4 (expected '$2' before '$3')"
+  fi
+}
+
 echo "== Task 1: write-blog-article skill workflow =="
 assert_file "$SKILL"
 assert_nonempty "$SKILL"
@@ -101,6 +117,12 @@ assert_contains "$SKILL" "draft: false" "SKILL flips draft: to false on approval
 # Step 9: publish on command.
 assert_contains_ci "$SKILL" "publish" "SKILL publishes on explicit command"
 assert_contains "$SKILL" "published/" "SKILL moves the file into published/"
+publish_section="$(sed -n '/^### 9\. Publish on command$/,/^## /p' "$SKILL")"
+assert_text_contains "$publish_section" 'set `lastmod` to today' "SKILL refreshes lastmod on publish"
+assert_text_contains "$publish_section" "today's local date" "SKILL uses the local publication date"
+assert_text_contains "$publish_section" '`YYYY-MM-DD`' "SKILL uses the required date format"
+assert_text_contains "$publish_section" 'original `date` unchanged' "SKILL preserves the creation date"
+assert_text_ordered "$publish_section" 'set `lastmod`' 'move `drafts/' "SKILL refreshes lastmod before moving the article"
 # Topic traceability: topic_key frontmatter + ledger append on publish.
 assert_contains "$SKILL" "topic_key" "SKILL writes a topic_key frontmatter field"
 assert_contains "$SKILL" "published-topics.md" "SKILL appends to the published-topics ledger on publish"
