@@ -226,6 +226,18 @@ test('createTopicHandlers_validates_bounds_and_paths_without_leaking_exceptions'
   assert.equal(invalidBounds.isError, true);
   assert.equal(relativePath.isError, true);
   assert.equal(operationFailure.isError, true);
+  assert.deepEqual(invalidBounds.structuredContent, {
+    code: 'invalid_arguments',
+    operation: 'discover_projects',
+  });
+  assert.deepEqual(relativePath.structuredContent, {
+    code: 'invalid_arguments',
+    operation: 'collect_activity',
+  });
+  assert.deepEqual(operationFailure.structuredContent, {
+    code: 'collect_activity_failed',
+    operation: 'collect_activity',
+  });
   assert.doesNotMatch(
     JSON.stringify([invalidBounds, relativePath, operationFailure]),
     /raw secret|must-not-leak|raw discovery/i

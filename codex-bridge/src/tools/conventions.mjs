@@ -1,18 +1,12 @@
 import { z } from 'zod/v4';
 
 import { createConventionOperations } from '../conventions.mjs';
+import { toolFailure } from './failures.mjs';
 
 function success(value) {
   return {
     content: [{ type: 'text', text: JSON.stringify(value) }],
     structuredContent: value,
-  };
-}
-
-function failure(message) {
-  return {
-    content: [{ type: 'text', text: message }],
-    isError: true,
   };
 }
 
@@ -38,8 +32,11 @@ export function createConventionsHandlers(options = {}) {
       handler: async (args) => {
         try {
           return success(await operations().writeConventions(args));
-        } catch {
-          return failure('Unable to write project conventions');
+        } catch (error) {
+          return toolFailure(error, {
+            code: 'conventions_write_failed',
+            operation: 'write_conventions',
+          });
         }
       },
     },

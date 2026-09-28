@@ -2,7 +2,6 @@ import { createReadStream } from 'node:fs';
 import { opendir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import readline from 'node:readline';
 
 import { LIMITS } from './limits.mjs';
 import { redactText } from './redact.mjs';
@@ -18,6 +17,14 @@ function validTimestamp(value) {
 function addWarning(warnings, warning) {
   if (warnings.length < MAX_WARNINGS) {
     warnings.push(warning);
+  }
+}
+
+function addTerminalWarning(warnings, warning) {
+  if (warnings.length < MAX_WARNINGS) {
+    warnings.push(warning);
+  } else {
+    warnings[MAX_WARNINGS - 1] = warning;
   }
 }
 
@@ -155,34 +162,106 @@ function applyRecord(record, context) {
 }
 
 async function parseRollout(file, context) {
-  const input = createReadStream(file, { encoding: 'utf8' });
-  const lines = readline.createInterface({ input, crlfDelay: Infinity });
+  const input = createReadStream(file, {
+    end: LIMITS.rolloutFileBytes - 1,
+    highWaterMark: 64 * 1024,
+  });
   let supported = false;
   let lineNumber = 0;
+  let recordCount = 0;
+  let fragments = [];
+  let fragmentBytes = 0;
+  let lineOversized = false;
   context.currentSessionId = null;
 
+  function applyLine(lineBytes) {
+    lineNumber += 1;
+    context.lineNumber = lineNumber;
+    if (lineOversized) {
+      addWarning(context.warnings, {
+        code: 'rollout_line_too_large',
+        message: 'Skipped a Codex rollout line above the byte limit',
+        file: path.basename(file),
+        line: lineNumber,
+      });
+      return true;
+    }
+
+    const line = lineBytes.toString('utf8').replace(/\r$/u, '');
+    if (!line.trim()) return true;
+    recordCount += 1;
+    if (recordCount > LIMITS.rolloutRecordsPerFile) {
+      addTerminalWarning(context.warnings, {
+        code: 'rollout_record_limit',
+        message: 'Stopped reading a Codex rollout file at the record limit',
+        file: path.basename(file),
+        line: lineNumber,
+      });
+      return false;
+    }
+
+    let record;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      context.stats.malformedLines += 1;
+      addWarning(context.warnings, {
+        code: 'malformed_json',
+        message: 'Skipped malformed JSON in a Codex rollout file',
+        file: path.basename(file),
+        line: lineNumber,
+      });
+      return true;
+    }
+    if (applyRecord(record, context)) {
+      supported = true;
+      context.stats.supportedRecords += 1;
+    }
+    return true;
+  }
+
+  function appendFragment(fragment) {
+    if (lineOversized) return;
+    if (fragmentBytes + fragment.length > LIMITS.rolloutLineBytes) {
+      fragments = [];
+      fragmentBytes = 0;
+      lineOversized = true;
+      return;
+    }
+    fragments.push(fragment);
+    fragmentBytes += fragment.length;
+  }
+
+  function finishLine() {
+    const lineBytes = lineOversized
+      ? Buffer.alloc(0)
+      : Buffer.concat(fragments, fragmentBytes);
+    const keepReading = applyLine(lineBytes);
+    fragments = [];
+    fragmentBytes = 0;
+    lineOversized = false;
+    return keepReading;
+  }
+
   try {
-    for await (const line of lines) {
-      lineNumber += 1;
-      context.lineNumber = lineNumber;
-      if (!line.trim()) continue;
-      let record;
-      try {
-        record = JSON.parse(line);
-      } catch {
-        context.stats.malformedLines += 1;
-        addWarning(context.warnings, {
-          code: 'malformed_json',
-          message: 'Skipped malformed JSON in a Codex rollout file',
-          file: path.basename(file),
-          line: lineNumber,
-        });
-        continue;
+    let keepReading = true;
+    for await (const chunk of input) {
+      let start = 0;
+      while (keepReading) {
+        const newline = chunk.indexOf(0x0a, start);
+        if (newline === -1) {
+          appendFragment(chunk.subarray(start));
+          break;
+        }
+        appendFragment(chunk.subarray(start, newline));
+        keepReading = finishLine();
+        start = newline + 1;
+        if (start >= chunk.length) break;
       }
-      if (applyRecord(record, context)) {
-        supported = true;
-        context.stats.supportedRecords += 1;
-      }
+      if (!keepReading) break;
+    }
+    if (keepReading && (fragmentBytes > 0 || lineOversized)) {
+      finishLine();
     }
   } catch {
     addWarning(context.warnings, {
@@ -282,16 +361,32 @@ export async function scanRollouts(options) {
       continue;
     }
     if (fileStat.mtimeMs <= lo) {
-      prunedFiles.push(file);
+      prunedFiles.push({ file, fileSize: fileStat.size });
       continue;
     }
     stats.scannedFiles += 1;
+    if (fileStat.size > LIMITS.rolloutFileBytes) {
+      addWarning(warnings, {
+        code: 'rollout_file_too_large',
+        message: 'Skipped a Codex rollout file above the byte limit',
+        file: path.basename(file),
+      });
+      continue;
+    }
     if (await parseRollout(file, context)) stats.supportedFiles += 1;
   }
 
   if (stats.supportedRecords === 0) {
-    for (const file of prunedFiles) {
+    for (const { file, fileSize } of prunedFiles) {
       stats.scannedFiles += 1;
+      if (fileSize > LIMITS.rolloutFileBytes) {
+        addWarning(warnings, {
+          code: 'rollout_file_too_large',
+          message: 'Skipped a Codex rollout file above the byte limit',
+          file: path.basename(file),
+        });
+        continue;
+      }
       if (await parseRollout(file, context)) {
         stats.supportedFiles += 1;
         break;

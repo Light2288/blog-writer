@@ -5,6 +5,7 @@ import { z } from 'zod/v4';
 import { collectActivity } from '../activity.mjs';
 import { scanRollouts } from '../history.mjs';
 import { createTopicOperations } from '../topics.mjs';
+import { toolFailure } from './failures.mjs';
 
 const boundsShape = {
   lo: z.number().int().nonnegative(),
@@ -24,13 +25,6 @@ function success(value) {
   return {
     content: [{ type: 'text', text: JSON.stringify(value) }],
     structuredContent: value,
-  };
-}
-
-function failure(message) {
-  return {
-    content: [{ type: 'text', text: message }],
-    isError: true,
   };
 }
 
@@ -56,7 +50,10 @@ export function createTopicHandlers(options = {}) {
       },
       handler: async (args) => {
         if (!validBounds(args)) {
-          return failure('Invalid discover_projects arguments');
+          return toolFailure(undefined, {
+            code: 'invalid_arguments',
+            operation: 'discover_projects',
+          });
         }
         try {
           const result = await scanRolloutsImpl({
@@ -71,8 +68,11 @@ export function createTopicHandlers(options = {}) {
             warnings: result.warnings,
             stats: result.stats,
           });
-        } catch {
-          return failure('Unable to discover projects from Codex history');
+        } catch (error) {
+          return toolFailure(error, {
+            code: 'discover_projects_failed',
+            operation: 'discover_projects',
+          });
         }
       },
     },
@@ -94,7 +94,10 @@ export function createTopicHandlers(options = {}) {
             (project) => typeof project !== 'string' || !path.isAbsolute(project)
           )
         ) {
-          return failure('Invalid collect_activity arguments');
+          return toolFailure(undefined, {
+            code: 'invalid_arguments',
+            operation: 'collect_activity',
+          });
         }
         try {
           return success(
@@ -105,8 +108,11 @@ export function createTopicHandlers(options = {}) {
               confirmedProjects: [...new Set(args.confirmed_projects)],
             })
           );
-        } catch {
-          return failure('Unable to collect activity from local history');
+        } catch (error) {
+          return toolFailure(error, {
+            code: 'collect_activity_failed',
+            operation: 'collect_activity',
+          });
         }
       },
     },
@@ -122,8 +128,11 @@ export function createTopicHandlers(options = {}) {
       handler: async (args) => {
         try {
           return success(await operations().writeTopicDraft(args));
-        } catch {
-          return failure('Unable to write the topic draft');
+        } catch (error) {
+          return toolFailure(error, {
+            code: 'topic_draft_write_failed',
+            operation: 'write_topic_draft',
+          });
         }
       },
     },
@@ -135,8 +144,11 @@ export function createTopicHandlers(options = {}) {
       handler: async (args) => {
         try {
           return success(await operations().finalizeTopics(args));
-        } catch {
-          return failure('Unable to finalize the topic draft');
+        } catch (error) {
+          return toolFailure(error, {
+            code: 'topic_finalize_failed',
+            operation: 'finalize_topics',
+          });
         }
       },
     },

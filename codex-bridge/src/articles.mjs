@@ -12,7 +12,6 @@ import {
   resolveProjectRoot,
 } from './paths.mjs';
 
-const DRAFT_MARKER = /^draft: true(?=\r?$)/gmu;
 const DRAFT_FIELD_MARKER = /^draft:[^\r\n]*(?=\r?$)/gmu;
 const DATE_MARKER = /^date: (\d{4}-\d{2}-\d{2})(?=\r?$)/gmu;
 const LASTMOD_MARKER = /^lastmod: (\d{4}-\d{2}-\d{2})(?=\r?$)/gmu;
@@ -42,6 +41,104 @@ function assertOneDraftMarker(content, expected = 'draft: true') {
   }
 }
 
+function parseFrontmatter(content) {
+  const opening = /^(?:\uFEFF)?---\r?\n/u.exec(content);
+  if (!opening) {
+    throw new Error('Article must start with delimited YAML frontmatter');
+  }
+  const closing = /^---(?=\r?$)/gmu;
+  closing.lastIndex = opening[0].length;
+  const match = closing.exec(content);
+  if (!match) {
+    throw new Error('Article frontmatter must have a closing delimiter');
+  }
+  const closingLineEnd = content.indexOf('\n', match.index);
+  return {
+    raw: content.slice(opening[0].length, match.index),
+    body: content.slice(
+      closingLineEnd === -1 ? content.length : closingLineEnd + 1,
+    ),
+    start: opening[0].length,
+    end: match.index,
+  };
+}
+
+function replaceFrontmatter(content, frontmatter, replacement) {
+  return `${content.slice(0, frontmatter.start)}${replacement}${content.slice(frontmatter.end)}`;
+}
+
+function assertRequiredBlock(content, pattern, label) {
+  if ((content.match(pattern) ?? []).length !== 1) {
+    throw new Error(
+      `Article frontmatter must contain exactly one complete ${label}`,
+    );
+  }
+}
+
+function assertLanguageBlock(body, language) {
+  const escaped = language.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  const pattern = new RegExp(
+    `<Lang value="${escaped}">\\r?\\n([\\s\\S]*?)\\r?\\n<\\/Lang>`,
+    'gu',
+  );
+  const matches = [...body.matchAll(pattern)];
+  if (matches.length !== 1 || matches[0][1].trim().length === 0) {
+    throw new Error(
+      `Article body must contain exactly one non-empty ${language} language block`,
+    );
+  }
+  return matches[0].index;
+}
+
+function validateCompleteArticle(content, expectedDraft) {
+  const frontmatter = parseFrontmatter(content);
+  const normalized = frontmatter.raw.replaceAll('\r\n', '\n');
+  assertOneDraftMarker(frontmatter.raw, `draft: ${expectedDraft}`);
+  assertRequiredBlock(
+    normalized,
+    /^title:\n {2}en: .*\S.*\n {2}it: .*\S.*$/gmu,
+    'bilingual title field',
+  );
+  assertRequiredBlock(
+    normalized,
+    /^summary:\n {2}en: >[+-]?\n(?: {4}.*\S.*\n)+ {2}it: >[+-]?\n(?: {4}.*\S.*(?:\n|$))+/gmu,
+    'bilingual summary field',
+  );
+  assertRequiredBlock(
+    normalized,
+    /^tags:\n {2}- id: [a-z0-9]+(?:-[a-z0-9]+)*\n {4}label:\n {6}en: .*\S.*\n {6}it: .*\S.*(?=\n|$)/gmu,
+    'bilingual tags field',
+  );
+  assertRequiredBlock(
+    normalized,
+    /^images:(?: \[\]|\n(?: {2}- .+(?:\n|$))+)(?=\n|$)/gmu,
+    'images field',
+  );
+
+  const dateMatch = exactSingleMatch(frontmatter.raw, DATE_MARKER, 'date field');
+  const lastmodMatch = exactSingleMatch(
+    frontmatter.raw,
+    LASTMOD_MARKER,
+    'lastmod field',
+  );
+  const topicKeyMatch = exactSingleMatch(
+    frontmatter.raw,
+    TOPIC_KEY_MARKER,
+    'canonical topic_key field',
+  );
+  assertValidDate(dateMatch[1]);
+  assertValidDate(lastmodMatch[1]);
+
+  const englishIndex = assertLanguageBlock(frontmatter.body, 'en');
+  const italianIndex = assertLanguageBlock(frontmatter.body, 'it');
+  if (englishIndex >= italianIndex) {
+    throw new Error(
+      'Article body must place the English block before the Italian block',
+    );
+  }
+  return { frontmatter, topicKey: topicKeyMatch[1] };
+}
+
 function validateDraftArguments({ slug, content, overwrite }) {
   assertValidSlug(slug);
   if (typeof content !== 'string') {
@@ -50,7 +147,8 @@ function validateDraftArguments({ slug, content, overwrite }) {
   if (typeof overwrite !== 'boolean') {
     throw new Error('Article overwrite approval must be explicit');
   }
-  assertOneDraftMarker(content);
+  const frontmatter = parseFrontmatter(content);
+  assertOneDraftMarker(frontmatter.raw);
 }
 
 async function readRegularUtf8(target, label) {
@@ -127,24 +225,19 @@ function exactSingleMatch(content, pattern, label) {
 
 function validateFinalizedArticle(content, publicationDate) {
   assertValidDate(publicationDate);
-  assertOneDraftMarker(content, 'draft: false');
-
-  const dateMatch = exactSingleMatch(content, DATE_MARKER, 'date field');
-  const lastmodMatch = exactSingleMatch(content, LASTMOD_MARKER, 'lastmod field');
-  const topicKeyMatch = exactSingleMatch(
-    content,
-    TOPIC_KEY_MARKER,
-    'canonical topic_key field',
+  const validated = validateCompleteArticle(content, false);
+  const updatedFrontmatter = validated.frontmatter.raw.replace(
+    LASTMOD_MARKER,
+    `lastmod: ${publicationDate}`,
   );
-  assertValidDate(dateMatch[1]);
-  assertValidDate(lastmodMatch[1]);
 
   return {
-    content: content.replace(
-      LASTMOD_MARKER,
-      `lastmod: ${publicationDate}`,
+    content: replaceFrontmatter(
+      content,
+      validated.frontmatter,
+      updatedFrontmatter,
     ),
-    topicKey: topicKeyMatch[1],
+    topicKey: validated.topicKey,
   };
 }
 
@@ -204,8 +297,12 @@ export async function writeArticleDraft(args, context) {
 export async function finalizeArticle({ slug }, context) {
   const target = await articleTarget(context, 'drafts', slug);
   const { content, snapshot } = await readRegularArticle(target);
-  assertOneDraftMarker(content);
-  const finalized = content.replace(DRAFT_MARKER, 'draft: false');
+  const validated = validateCompleteArticle(content, true);
+  const finalized = replaceFrontmatter(
+    content,
+    validated.frontmatter,
+    validated.frontmatter.raw.replace(DRAFT_FIELD_MARKER, 'draft: false'),
+  );
   await context.atomicWriteImpl(target, finalized, {
     expectedTarget: snapshot,
     maxBytes: LIMITS.generatedFileBytes,
@@ -401,13 +498,18 @@ export async function publishArticle({ slug, publicationDate }, context) {
     );
 
     if (rollbackErrors.length > 0) {
-      throw new AggregateError(
+      const failure = new AggregateError(
         [error, ...rollbackErrors],
         'Article publication failed and rollback could not fully restore state',
       );
+      failure.code = 'publication_rollback_incomplete';
+      throw failure;
     }
-    throw new Error('Article publication failed; prior state was restored', {
-      cause: error,
-    });
+    const failure = new Error(
+      'Article publication failed; prior state was restored',
+      { cause: error },
+    );
+    failure.code = 'publication_failed_restored';
+    throw failure;
   }
 }

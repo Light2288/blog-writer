@@ -20,16 +20,35 @@ import { createWriterHandlers } from '../src/tools/writer.mjs';
 const SLUG = 'bounded-article';
 const DRAFT = [
   '---',
-  'title: Bounded article',
+  'title:',
+  '  en: Bounded article',
+  '  it: Articolo limitato',
+  'summary:',
+  '  en: >',
+  '    A bounded English summary.',
+  '  it: >',
+  '    Un riassunto italiano limitato.',
   'date: 2026-09-01',
   'lastmod: 2026-09-01',
   'topic_key: bounded-topic',
+  'tags:',
+  '  - id: engineering',
+  '    label:',
+  '      en: Engineering',
+  '      it: Ingegneria',
   'draft: true',
+  'images: []',
   '---',
   '',
   '<Lang value="en">',
   '',
   'Evidence.',
+  '',
+  '</Lang>',
+  '',
+  '<Lang value="it">',
+  '',
+  'Prova.',
   '',
   '</Lang>',
   '',
@@ -260,6 +279,37 @@ test('finalizeArticle_rejects_conflicting_or_invalid_additional_draft_markers_wi
   }
 });
 
+test('finalizeArticle_rejects_incomplete_frontmatter_and_body_field_markers', async (t) => {
+  const root = await temporaryProject(t);
+  const incompleteArticles = [
+    DRAFT.replace('  it: Articolo limitato\n', ''),
+    DRAFT.replace('  it: >\n    Un riassunto italiano limitato.\n', ''),
+    DRAFT.replace(
+      'tags:\n  - id: engineering\n    label:\n      en: Engineering\n      it: Ingegneria\n',
+      '',
+    ),
+    DRAFT.replace(
+      '<Lang value="it">\n\nProva.\n\n</Lang>\n',
+      '',
+    ),
+  ];
+  const bodyMarkers = DRAFT.replace('lastmod: 2026-09-01\n', '').replace(
+    'Evidence.',
+    'Evidence.\n\n```yaml\nlastmod: 2026-09-01\ndraft: true\n```',
+  );
+  const operations = createArticleOperations({ projectRoot: root });
+
+  for (const content of [...incompleteArticles, bodyMarkers]) {
+    await writeFile(draftTarget(root), content);
+    const before = await readFile(draftTarget(root));
+    await assert.rejects(
+      operations.finalizeArticle({ slug: SLUG }),
+      /frontmatter|title|summary|tags|language block|lastmod|required/i,
+    );
+    assert.deepEqual(await readFile(draftTarget(root)), before);
+  }
+});
+
 test('createWriterHandlers_exposes_only_scoped_writer_tools_and_arguments', async (t) => {
   const root = await temporaryProject(t);
   const handlers = createWriterHandlers({ projectRoot: root });
@@ -286,6 +336,126 @@ test('createWriterHandlers_exposes_only_scoped_writer_tools_and_arguments', asyn
     Object.keys(handlers.publish_article.config.inputSchema.shape).sort(),
     ['publication_date', 'slug'],
   );
+});
+
+test('createWriterHandlers_returns_sanitized_structured_failures_for_all_operations', async () => {
+  const raw = new Error('/private/path token=must-not-leak');
+  const handlers = createWriterHandlers({
+    readSourceFileImpl: async () => { throw raw; },
+    articleOperations: {
+      writeArticleDraft: async () => { throw raw; },
+      finalizeArticle: async () => { throw raw; },
+      publishArticle: async () => { throw raw; },
+    },
+  });
+  const responses = [
+    await handlers.read_source_file.handler({
+      path: '/private/path',
+      confirmed_projects: ['/private'],
+    }),
+    await handlers.write_article_draft.handler({
+      slug: 'safe-slug',
+      content: DRAFT,
+      overwrite: false,
+    }),
+    await handlers.finalize_article.handler({ slug: '../unsafe' }),
+    await handlers.publish_article.handler({
+      slug: 'safe-slug',
+      publication_date: '2026-09-28',
+    }),
+  ];
+
+  assert.deepEqual(
+    responses.map(({ structuredContent }) => structuredContent),
+    [
+      { code: 'source_read_failed', operation: 'read_source_file' },
+      {
+        code: 'article_draft_write_failed',
+        operation: 'write_article_draft',
+        slug: 'safe-slug',
+      },
+      { code: 'article_finalize_failed', operation: 'finalize_article' },
+      {
+        code: 'publication_failed',
+        operation: 'publish_article',
+        slug: 'safe-slug',
+      },
+    ],
+  );
+  assert.equal(responses.every(({ isError }) => isError === true), true);
+  assert.doesNotMatch(JSON.stringify(responses), /private|must-not-leak|\.\./i);
+});
+
+test('publish_article_distinguishes_restored_and_incomplete_rollbacks', async (t) => {
+  const restoredRoot = await temporaryProject(t);
+  const finalized = DRAFT.replace('draft: true', 'draft: false');
+  await writeFile(draftTarget(restoredRoot), finalized);
+  const restoredOperations = createArticleOperations({
+    projectRoot: restoredRoot,
+    beforeLedgerRename: async () => {
+      throw new Error('injected secret restored failure');
+    },
+  });
+  const restoredHandler = createWriterHandlers({
+    articleOperations: restoredOperations,
+  }).publish_article.handler;
+
+  const restored = await restoredHandler({
+    slug: SLUG,
+    publication_date: '2026-09-28',
+  });
+
+  const incompleteRoot = await temporaryProject(t);
+  await writeFile(draftTarget(incompleteRoot), finalized);
+  const incompleteOperations = createArticleOperations({
+    projectRoot: incompleteRoot,
+    beforeLedgerRename: async () => {
+      const draftNames = await readdir(path.join(incompleteRoot, 'drafts'));
+      const backup = draftNames.find((name) => name.endsWith('.backup'));
+      await rm(path.join(incompleteRoot, 'drafts', backup));
+      throw new Error('injected secret incomplete failure');
+    },
+  });
+  const incompleteHandler = createWriterHandlers({
+    articleOperations: incompleteOperations,
+  }).publish_article.handler;
+
+  const incomplete = await incompleteHandler({
+    slug: SLUG,
+    publication_date: '2026-09-28',
+  });
+
+  assert.deepEqual(restored.structuredContent, {
+    code: 'publication_failed_restored',
+    operation: 'publish_article',
+    slug: SLUG,
+  });
+  assert.deepEqual(incomplete.structuredContent, {
+    code: 'publication_rollback_incomplete',
+    operation: 'publish_article',
+    slug: SLUG,
+  });
+  assert.doesNotMatch(
+    JSON.stringify([restored, incomplete]),
+    /injected secret|drafts|published|inputs/i,
+  );
+});
+
+test('publishArticle_rejects_required_frontmatter_fields_found_only_in_the_body', async (t) => {
+  const root = await temporaryProject(t);
+  const malformed = DRAFT.replace('images: []\n', '').replace(
+    'Evidence.',
+    'Evidence.\n\n```yaml\nimages: []\n```',
+  ).replace('draft: true', 'draft: false');
+  await writeFile(draftTarget(root), malformed);
+  const operations = createArticleOperations({ projectRoot: root });
+  const before = await projectState(root);
+
+  await assert.rejects(
+    operations.publishArticle({ slug: SLUG, publicationDate: '2026-09-28' }),
+    /frontmatter|images|required/i,
+  );
+  assert.deepEqual(await projectState(root), before);
 });
 
 test('publishArticle_validates_final_marker_date_and_frontmatter_before_mutation', async (t) => {

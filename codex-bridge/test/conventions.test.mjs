@@ -140,3 +140,25 @@ test('createConventionsHandlers_has_only_the_scoped_convention_tool_and_argument
     '# Conventions\n',
   );
 });
+
+test('createConventionsHandlers_returns_a_sanitized_structured_failure', async () => {
+  const handlers = createConventionsHandlers({
+    conventionOperations: {
+      writeConventions: async () => {
+        throw new Error('token=must-not-leak /private/conventions');
+      },
+    },
+  });
+
+  const response = await handlers.write_conventions.handler({
+    content: '# Conventions\n',
+    overwrite: true,
+  });
+
+  assert.deepEqual(response.structuredContent, {
+    code: 'conventions_write_failed',
+    operation: 'write_conventions',
+  });
+  assert.equal(response.isError, true);
+  assert.doesNotMatch(JSON.stringify(response), /must-not-leak|private/i);
+});

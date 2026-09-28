@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import { LIMITS } from '../src/limits.mjs';
 import { readSourceFile } from '../src/source-files.mjs';
 
 async function temporaryDirectory(t, prefix) {
@@ -106,6 +107,17 @@ test('readSourceFile_rejects_invalid_UTF_8_beyond_the_returned_prefix', async (t
   await assert.rejects(
     readSourceFile({ path: source, confirmedProjects: [project] }),
     /UTF-?8|binary|text/i,
+  );
+});
+
+test('readSourceFile_rejects_files_above_the_input_byte_limit_before_reading', async (t) => {
+  const project = await temporaryDirectory(t, 'blog-writer-source-');
+  const source = path.join(project, 'oversized.txt');
+  await writeFile(source, 'a'.repeat(LIMITS.sourceFileBytes + 1));
+
+  await assert.rejects(
+    readSourceFile({ path: source, confirmedProjects: [project] }),
+    /source.*byte|source.*size|too large|exceeds/i,
   );
 });
 

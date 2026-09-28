@@ -2,18 +2,12 @@ import { z } from 'zod/v4';
 
 import { createArticleOperations } from '../articles.mjs';
 import { readSourceFile } from '../source-files.mjs';
+import { toolFailure } from './failures.mjs';
 
 function success(value) {
   return {
     content: [{ type: 'text', text: JSON.stringify(value) }],
     structuredContent: value,
-  };
-}
-
-function failure(message) {
-  return {
-    content: [{ type: 'text', text: message }],
-    isError: true,
   };
 }
 
@@ -46,8 +40,11 @@ export function createWriterHandlers(options = {}) {
               confirmedProjects: args.confirmed_projects,
             }),
           );
-        } catch {
-          return failure('Unable to read the requested source file');
+        } catch (error) {
+          return toolFailure(error, {
+            code: 'source_read_failed',
+            operation: 'read_source_file',
+          });
         }
       },
     },
@@ -63,8 +60,12 @@ export function createWriterHandlers(options = {}) {
       handler: async (args) => {
         try {
           return success(await operations().writeArticleDraft(args));
-        } catch {
-          return failure('Unable to write the article draft');
+        } catch (error) {
+          return toolFailure(error, {
+            code: 'article_draft_write_failed',
+            operation: 'write_article_draft',
+            slug: args.slug,
+          });
         }
       },
     },
@@ -76,8 +77,12 @@ export function createWriterHandlers(options = {}) {
       handler: async (args) => {
         try {
           return success(await operations().finalizeArticle(args));
-        } catch {
-          return failure('Unable to finalize the article draft');
+        } catch (error) {
+          return toolFailure(error, {
+            code: 'article_finalize_failed',
+            operation: 'finalize_article',
+            slug: args.slug,
+          });
         }
       },
     },
@@ -94,8 +99,12 @@ export function createWriterHandlers(options = {}) {
           return success(
             await operations().publishArticle({ slug, publicationDate }),
           );
-        } catch {
-          return failure('Unable to publish the article');
+        } catch (error) {
+          return toolFailure(error, {
+            code: 'publication_failed',
+            operation: 'publish_article',
+            slug,
+          });
         }
       },
     },

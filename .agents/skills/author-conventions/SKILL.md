@@ -40,9 +40,13 @@ or placeholder-only, use the template as the in-memory starting document. If
 some sections contain real guidance, preserve it byte-for-byte unless the user
 asks to revise that section. Do not persist a seed merely to ask questions.
 
-Before the first persistence to any existing root file, ask once in the main
-chat for permission to update it. Pass `overwrite: true` only after that
-approval and only while preserving every section outside the current answer.
+Before the first persistence, ask once in the main chat for permission to
+create and repeatedly update `CONVENTIONS.md` throughout this interview,
+regardless of whether the root file already exists. That one approval covers
+later persistence after each reviewed answer. Use `overwrite: false` for the
+first write when the file is absent; after it exists, pass `overwrite: true`
+only under that approval and while preserving every section outside the
+current answer.
 
 ### 2. Interview one section at a time
 
@@ -76,9 +80,10 @@ in the main chat and record the resolution in every affected section.
 After each answer, assemble the complete updated document while preserving all
 unmodified sections, then delegate `write_conventions` with that complete
 content and the approved overwrite flag. The user's answer authorizes that
-section's content; an existing target still requires the one-time update
-approval from step 1. Never delegate a partial section, invent answers, or use
-a general file-writing tool. Return to step 2 after the write succeeds.
+section's content; the create-and-repeated-update approval from step 1 is still
+required before any persistence. Never delegate a partial section, invent
+answers, or use a general file-writing tool. Return to step 2 after the write
+succeeds.
 
 ### 4. Keep final review in the main chat
 

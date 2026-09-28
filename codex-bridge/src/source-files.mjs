@@ -131,6 +131,9 @@ export async function readSourceFile({ path: requestedPath, confirmedProjects })
     if (!stat.isFile()) {
       throw new Error('Source target must be a regular file');
     }
+    if (stat.size > LIMITS.sourceFileBytes) {
+      throw new Error('Source target exceeds the source-file byte limit');
+    }
 
     const result = await readBoundedText(handle, stat.size);
     const statAfter = await handle.stat();

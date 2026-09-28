@@ -231,3 +231,30 @@ test('createTopicHandlers_exposes_only_the_topic_mutation_arguments', async (t) 
   assert.equal(finalized.isError, undefined);
   assert.equal(await readFile(target(root), 'utf8'), DRAFT.replace('DRAFT', 'FINAL'));
 });
+
+test('createTopicHandlers_returns_sanitized_structured_mutation_failures', async () => {
+  const raw = new Error('token=must-not-leak /private/topics');
+  const handlers = createTopicHandlers({
+    topicOperations: {
+      writeTopicDraft: async () => { throw raw; },
+      finalizeTopics: async () => { throw raw; },
+    },
+  });
+
+  const written = await handlers.write_topic_draft.handler({
+    date: DATE,
+    content: DRAFT,
+    overwrite: false,
+  });
+  const finalized = await handlers.finalize_topics.handler({ date: DATE });
+
+  assert.deepEqual(written.structuredContent, {
+    code: 'topic_draft_write_failed',
+    operation: 'write_topic_draft',
+  });
+  assert.deepEqual(finalized.structuredContent, {
+    code: 'topic_finalize_failed',
+    operation: 'finalize_topics',
+  });
+  assert.doesNotMatch(JSON.stringify([written, finalized]), /must-not-leak|private/i);
+});

@@ -377,6 +377,66 @@ test('scanRollouts_warns_safely_for_malformed_lines_and_ignores_mixed_unknown_re
   assert.doesNotMatch(warningText, /THIS_RAW_SECRET|do-not-leak/);
 });
 
+test('scanRollouts_skips_oversized_files_and_lines_before_parsing', async (t) => {
+  const home = await syntheticHome(t);
+  await copyFixture(home, 'supported.jsonl');
+  await writeRollout(
+    path.join(home.sessions, 'oversized-file.jsonl'),
+    'x'.repeat(LIMITS.rolloutFileBytes + 1),
+  );
+  await writeRollout(
+    path.join(home.sessions, 'oversized-line.jsonl'),
+    `${'x'.repeat(LIMITS.rolloutLineBytes + 1)}\n`,
+  );
+
+  const result = await scanRollouts({
+    codexHome: home.root,
+    lo: LO,
+    hi: HI,
+    confirmedProjects: [PROJECT_ALPHA],
+  });
+
+  assert.equal(result.sessions.length, 1);
+  assert.deepEqual(
+    result.warnings.map(({ code }) => code).sort(),
+    ['rollout_file_too_large', 'rollout_line_too_large'],
+  );
+  assert.equal(result.stats.malformedLines, 0);
+});
+
+test('scanRollouts_stops_each_file_at_the_record_limit_before_parsing_more', async (t) => {
+  const home = await syntheticHome(t);
+  const firstRecord = JSON.stringify({
+    timestamp: '2026-09-28T11:00:00.000Z',
+    type: 'session_meta',
+    payload: { id: 'bounded-records', cwd: PROJECT_ALPHA },
+  });
+  const ignoredRecords = Array.from(
+    { length: LIMITS.rolloutRecordsPerFile },
+    () => '{not parsed after the limit}',
+  );
+  await writeRollout(
+    path.join(home.sessions, 'too-many-records.jsonl'),
+    `${[firstRecord, ...ignoredRecords].join('\n')}\n`,
+  );
+
+  const result = await scanRollouts({
+    codexHome: home.root,
+    lo: LO,
+    hi: HI,
+    confirmedProjects: [PROJECT_ALPHA],
+  });
+
+  assert.deepEqual(result.sessions.map(({ id }) => id), ['bounded-records']);
+  assert.equal(result.stats.malformedLines, LIMITS.rolloutRecordsPerFile - 1);
+  assert.deepEqual(result.warnings.at(-1), {
+    code: 'rollout_record_limit',
+    message: 'Stopped reading a Codex rollout file at the record limit',
+    file: 'too-many-records.jsonl',
+    line: LIMITS.rolloutRecordsPerFile + 1,
+  });
+});
+
 test('scanRollouts_fails_closed_for_missing_or_zero_supported_history', async (t) => {
   const home = await syntheticHome(t);
   const unsupported = await copyFixture(home, 'unsupported.jsonl');
