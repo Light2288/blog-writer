@@ -1,0 +1,4 @@
+{"timestamp":"2026-09-28T10:00:00.000Z","type":"session_meta","payload":{"id":"session-supported","cwd":"/synthetic/project-alpha","title":"Codex ingestion work"}}
+{"timestamp":"2026-09-28T10:05:00.000Z","type":"response_item","payload":{"id":"message-user","type":"message","role":"user","content":[{"type":"input_text","text":"Implement the history adapter token=visible-secret"}]}}
+{"timestamp":"2026-09-28T10:10:00.000Z","type":"event_msg","payload":{"type":"task_started"}}
+{"timestamp":"2026-09-28T10:15:00.000Z","type":"response_item","payload":{"id":"message-assistant","type":"message","role":"assistant","content":[{"type":"output_text","text":"Added bounded parsing."}]}}

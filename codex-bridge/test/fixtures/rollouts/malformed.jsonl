@@ -1,0 +1,4 @@
+{"timestamp":"2026-09-28T12:00:00.000Z","type":"session_meta","payload":{"id":"session-malformed","cwd":"/synthetic/project-alpha","title":"Malformed line recovery"}}
+{"timestamp":"2026-09-28T12:01:00.000Z","type":"response_item","payload":{"id":"before-malformed","type":"message","role":"user","content":[{"type":"input_text","text":"Valid before malformed data."}]}}
+THIS_RAW_SECRET_MUST_NOT_APPEAR token=do-not-leak
+{"timestamp":"2026-09-28T12:02:00.000Z","type":"response_item","payload":{"id":"after-malformed","type":"message","role":"assistant","content":[{"type":"output_text","text":"Valid after malformed data."}]}}
