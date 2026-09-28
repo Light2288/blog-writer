@@ -10,9 +10,41 @@ activity. Source projects and Codex history are always read-only. The only
 output is `inputs/topics-YYYY-MM-DD.md`, written with `Status: DRAFT` and
 changed to `FINAL` only after explicit user approval.
 
-Delegate only to `topic-extractor`. The main chat owns every user question,
-project confirmation, overwrite choice, review, and approval. Never ask a custom agent to question the user. Give the custom agent bounded operations;
-it returns concise structured results and never owns the conversation.
+The main chat owns every user question, project confirmation, overwrite choice,
+review, and approval. Never ask a custom agent to question the user.
+
+## Execution modes
+
+Choose exactly one mode before resolving the time window. The launcher prompt
+selects command-scoped mode explicitly; tool visibility alone does not.
+
+### Command-scoped mode
+
+Use this mode only when the launcher selected it and the main session can call
+exactly these four bridge tools: `discover_projects`, `collect_activity`, `write_topic_draft`, and `finalize_topics`.
+
+Apply this decision order before any bridge call:
+
+1. If any cross-role bridge tool is visible — `write_conventions`,
+   `read_source_file`, `write_article_draft`, `finalize_article`, or
+   `publish_article` — stop and report the unexpected tool surface.
+2. If only some of the four topic tools are visible, treat it as a partial matching surface, stop, and report the missing tools.
+3. Only with all four topic tools and no cross-role tools, call the named
+   operations directly from the main session.
+
+Do not delegate to `topic-extractor` in command-scoped mode.
+Never use shell or general filesystem tools to replace a bridge mutation or history operation.
+
+### Custom-agent mode
+
+Use this fallback only when command-scoped mode was not selected. No `blog_writer_bridge` tool is visible in the main session.
+Delegate only to `topic-extractor`. Give it bounded operations; it returns
+concise structured results and never owns the conversation. If any bridge tool
+is visible without the exact topic surface, stop instead of falling back.
+
+For each bridge operation below, run it through the selected mode: call it
+directly in command-scoped mode, or delegate that same bounded operation in
+custom-agent mode.
 
 ## Workflow
 
@@ -34,8 +66,8 @@ Read `tracked-projects.txt`:
 
 - If it has non-comment, non-blank lines, normalize and deduplicate those paths
   and use them as the allowlist. Resolve relative entries against the Blog-Writer project root, then pass only absolute paths to the bridge.
-- Otherwise delegate `discover_projects` with `lo` and `hi` to
-  `topic-extractor`. In the main chat, show only the discovered directory list
+- Otherwise run `discover_projects` with `lo` and `hi`. In the main chat, show
+  only the discovered directory list
   and bridge warnings, then ask the user to confirm or edit the list. Do not
   collect activity until a non-empty discovered list is confirmed. An explicit
   user choice of an empty list ends with a normal empty DRAFT.
@@ -46,7 +78,7 @@ skipped only when their bounded bridge warning is carried forward.
 
 ### 3. Gather normalized activity
 
-Delegate `collect_activity` with `(lo, hi]` and the exact confirmed project
+Run `collect_activity` with `(lo, hi]` and the exact confirmed project
 paths. Depend only on the returned normalized activity records:
 `source`, `project_dir`, `timestamp`, `kind`, `id`, `title`, `text`, and
 `metadata`. Do not read rollout JSON, an internal Codex database, or an
@@ -110,7 +142,7 @@ Sort descending by Overall, then Reader appeal, then editorial judgment.
 Compose the complete file using the format below, with exactly one
 `Status: DRAFT`. If today's target already exists, the main chat asks whether
 to overwrite it; pass `overwrite: true` only after that explicit choice.
-Delegate `write_topic_draft` with the run date, full content, and approved
+Run `write_topic_draft` with the run date, full content, and approved
 overwrite flag. Even when no candidate remains, write the normal DRAFT with a
 plain "No new candidate topics found in this window" result and appendices.
 
@@ -119,12 +151,12 @@ plain "No new candidate topics found in this window" result and appendices.
 In the main chat, summarize only the project, session, commit, candidate, and
 flagged counts; mention warning/exclusion counts and point to the file. Never
 embed the file body or large markdown in a question. On requested changes,
-recompose the file, delegate `write_topic_draft` with the user's overwrite
+recompose the file, run `write_topic_draft` with the user's overwrite
 approval, and ask again.
 
 ### 10. Finalize on approval
 
-Only after explicit user approval, delegate `finalize_topics` for the run date.
+Only after explicit user approval, run `finalize_topics` for the run date.
 This is the only finalization path and changes only the status marker. Report
 the resulting path. Without approval, leave `Status: DRAFT` untouched.
 

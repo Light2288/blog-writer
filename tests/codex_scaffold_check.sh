@@ -149,6 +149,50 @@ assert_absent "$WRITER_SKILL" "previously dated or published article" \
 assert_contains "$WRITER_SKILL" "Never invent components outside this set" \
   "article skill preserves the controlled MDX vocabulary"
 
+echo "== Codex command-scoped and custom-agent modes =="
+for skill in "$TOPIC_SKILL" "$WRITER_SKILL"; do
+  assert_contains "$skill" "## Execution modes" \
+    "$skill defines mutually exclusive execution modes"
+  assert_contains "$skill" "### Command-scoped mode" \
+    "$skill documents direct main-session execution"
+  assert_contains "$skill" "### Custom-agent mode" \
+    "$skill preserves custom-agent fallback"
+  assert_contains "$skill" "partial matching surface" \
+    "$skill stops on a partial bridge surface"
+  assert_contains "$skill" "cross-role bridge tool" \
+    "$skill stops on cross-role bridge exposure"
+  assert_contains "$skill" "Never use shell or general filesystem tools" \
+    "$skill forbids mutation bypasses"
+done
+
+assert_contains "$TOPIC_SKILL" \
+  '`discover_projects`, `collect_activity`, `write_topic_draft`, and `finalize_topics`' \
+  "topic command mode requires the exact topic tool surface"
+assert_contains "$TOPIC_SKILL" \
+  'Do not delegate to `topic-extractor` in command-scoped mode.' \
+  "topic command mode forbids custom-agent delegation"
+assert_contains "$TOPIC_SKILL" \
+  'No `blog_writer_bridge` tool is visible' \
+  "topic custom-agent mode requires an absent main bridge surface"
+for cross_role in write_conventions read_source_file write_article_draft finalize_article publish_article; do
+  assert_contains "$TOPIC_SKILL" "\`$cross_role\`" \
+    "topic mode names cross-role tool $cross_role"
+done
+
+assert_contains "$WRITER_SKILL" \
+  '`read_source_file`, `write_article_draft`, `finalize_article`, and `publish_article`' \
+  "writer command mode requires the exact writer tool surface"
+assert_contains "$WRITER_SKILL" \
+  'Do not delegate to `blog-writer` in command-scoped mode.' \
+  "writer command mode forbids custom-agent delegation"
+assert_contains "$WRITER_SKILL" \
+  'No `blog_writer_bridge` tool is visible' \
+  "writer custom-agent mode requires an absent main bridge surface"
+for cross_role in discover_projects collect_activity write_topic_draft finalize_topics write_conventions; do
+  assert_contains "$WRITER_SKILL" "\`$cross_role\`" \
+    "writer mode names cross-role tool $cross_role"
+done
+
 echo "== Codex project and custom-agent configuration =="
 assert_file .codex/config.toml
 assert_file .codex/agents/topic-extractor.toml
