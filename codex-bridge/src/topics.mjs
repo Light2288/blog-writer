@@ -1,6 +1,7 @@
 import { constants } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
 import path from 'node:path';
+import { TextDecoder } from 'node:util';
 
 import { atomicWrite } from './atomic.mjs';
 import { LIMITS } from './limits.mjs';
@@ -11,6 +12,10 @@ import {
 } from './paths.mjs';
 
 const DRAFT_MARKER = /^Status: DRAFT(?=\r?$)/gmu;
+const UTF8_DECODER = new TextDecoder('utf-8', {
+  fatal: true,
+  ignoreBOM: true,
+});
 
 function assertOneDraftMarker(content) {
   const matches = content.match(DRAFT_MARKER) ?? [];
@@ -49,8 +54,15 @@ async function readRegularFile(target) {
     if (stat.size > LIMITS.generatedFileBytes) {
       throw new Error('Topic file exceeds the generated-file size limit');
     }
+    const bytes = await handle.readFile();
+    let content;
+    try {
+      content = UTF8_DECODER.decode(bytes);
+    } catch (error) {
+      throw new Error('Topic file must contain valid UTF-8', { cause: error });
+    }
     return {
-      content: await handle.readFile('utf8'),
+      content,
       snapshot: {
         exists: true,
         dev: stat.dev,

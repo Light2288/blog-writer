@@ -157,6 +157,27 @@ test('finalizeTopics_changes_only_the_single_Status_marker', async (t) => {
   );
 });
 
+test('finalizeTopics_rejects_invalid_UTF_8_without_rewriting_any_bytes', async (t) => {
+  const root = await temporaryProject(t);
+  const invalidUtf8 = Buffer.concat([
+    Buffer.from('# Topics\nStatus: DRAFT\nBefore invalid byte: ', 'utf8'),
+    Buffer.from([0xff]),
+    Buffer.from('\nAfter invalid byte.\n', 'utf8'),
+  ]);
+  await writeFile(target(root), invalidUtf8);
+  const operations = createTopicOperations({ projectRoot: root });
+
+  await assert.rejects(
+    operations.finalizeTopics({ date: DATE }),
+    /UTF-?8|encoding/i,
+  );
+
+  assert.deepEqual(await readFile(target(root)), invalidUtf8);
+  assert.deepEqual(await readdir(path.join(root, 'inputs')), [
+    path.basename(target(root)),
+  ]);
+});
+
 test('finalizeTopics_rejects_missing_duplicate_and_already_final_markers_without_changes', async (t) => {
   const cases = [
     '# Missing marker\n',
