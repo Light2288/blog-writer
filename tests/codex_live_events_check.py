@@ -179,6 +179,23 @@ class LiveEventVerifierTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("NEEDS_CONTEXT", result.stderr)
 
+    def test_rejects_exact_catalog_followed_by_unknown_tool_catalog(self):
+        result = self.run_verifier(
+            [
+                skill_event(),
+                spawn_event("child-a"),
+                catalog_event("child-a"),
+                catalog_event(
+                    "child-a",
+                    ["mcp__blog_writer_bridge__unexpected_bridge_tool"],
+                ),
+                call_event("child-a"),
+            ]
+        )
+
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("NEEDS_CONTEXT", result.stderr)
+
     def test_rejects_unknown_bare_or_prefixed_catalog_tools(self):
         for extra_tool in (
             "unexpected_bridge_tool",

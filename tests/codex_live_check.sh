@@ -445,7 +445,7 @@ for child_id in candidate_child_ids:
         missing.append(
             f"successful mcp_tool_call {expected_tool} with exact sentinel arguments"
         )
-    if not (exact_surface or fallback_surface):
+    if not ((exact_surface and not unknown_surface_tools) or fallback_surface):
         missing.append(
             "exact role tool catalog or fallback evidence for all allowed tools "
             "and every cross-role rejection"
