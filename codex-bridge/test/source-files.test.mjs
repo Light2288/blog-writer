@@ -130,3 +130,20 @@ test('readSourceFile_truncates_at_exactly_20000_characters', async (t) => {
   assert.equal(longResult.text, 'b'.repeat(20_000));
   assert.equal(longResult.truncated, true);
 });
+
+test('readSourceFile_counts_Unicode_code_points_without_splitting_an_astral_character', async (t) => {
+  const project = await temporaryDirectory(t, 'blog-writer-source-');
+  const source = path.join(project, 'astral-boundary.txt');
+  const expected = `${'a'.repeat(19_999)}😀`;
+  await writeFile(source, `${expected}tail`);
+
+  const result = await readSourceFile({
+    path: source,
+    confirmedProjects: [project],
+  });
+
+  assert.equal(result.text, expected);
+  assert.equal([...result.text].length, 20_000);
+  assert.equal(Buffer.from(result.text, 'utf8').toString('utf8'), result.text);
+  assert.equal(result.truncated, true);
+});

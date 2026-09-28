@@ -57,8 +57,16 @@ async function readBoundedText(handle, fileSize) {
   });
   const buffer = Buffer.alloc(Math.min(READ_CHUNK_BYTES, fileSize || 1));
   let position = 0;
-  let charactersSeen = 0;
-  let text = '';
+  let codePointsSeen = 0;
+  const retainedCodePoints = [];
+  function consume(decoded) {
+    for (const codePoint of decoded) {
+      codePointsSeen += 1;
+      if (retainedCodePoints.length < LIMITS.sourceFileCharacters) {
+        retainedCodePoints.push(codePoint);
+      }
+    }
+  }
   try {
     while (position < fileSize) {
       const length = Math.min(buffer.length, fileSize - position);
@@ -73,20 +81,11 @@ async function readBoundedText(handle, fileSize) {
         );
       }
       const decoded = decoder.decode(bytes, { stream: true });
-      charactersSeen += decoded.length;
-      if (text.length <= LIMITS.sourceFileCharacters) {
-        const remaining = LIMITS.sourceFileCharacters + 1 - text.length;
-        text += decoded.slice(0, remaining);
-      }
+      consume(decoded);
       position += bytesRead;
     }
 
-    const tail = decoder.decode();
-    charactersSeen += tail.length;
-    if (text.length <= LIMITS.sourceFileCharacters) {
-      const remaining = LIMITS.sourceFileCharacters + 1 - text.length;
-      text += tail.slice(0, remaining);
-    }
+    consume(decoder.decode());
   } catch (error) {
     if (error?.message?.includes('binary content')) {
       throw error;
@@ -97,8 +96,8 @@ async function readBoundedText(handle, fileSize) {
   }
 
   return {
-    text: text.slice(0, LIMITS.sourceFileCharacters),
-    truncated: charactersSeen > LIMITS.sourceFileCharacters,
+    text: retainedCodePoints.join(''),
+    truncated: codePointsSeen > LIMITS.sourceFileCharacters,
   };
 }
 

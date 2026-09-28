@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, open, rename, rm } from 'node:fs/promises';
+import { link, lstat, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { TextDecoder } from 'node:util';
 
@@ -13,7 +13,7 @@ import {
 } from './paths.mjs';
 
 const DRAFT_MARKER = /^draft: true(?=\r?$)/gmu;
-const FINAL_MARKER = /^draft: false(?=\r?$)/gmu;
+const DRAFT_FIELD_MARKER = /^draft:[^\r\n]*(?=\r?$)/gmu;
 const DATE_MARKER = /^date: (\d{4}-\d{2}-\d{2})(?=\r?$)/gmu;
 const LASTMOD_MARKER = /^lastmod: (\d{4}-\d{2}-\d{2})(?=\r?$)/gmu;
 const TOPIC_KEY_MARKER =
@@ -33,10 +33,12 @@ function assertValidSlug(slug) {
   }
 }
 
-function assertOneDraftMarker(content) {
-  const matches = content.match(DRAFT_MARKER) ?? [];
-  if (matches.length !== 1) {
-    throw new Error('Article content must contain exactly one draft: true marker');
+function assertOneDraftMarker(content, expected = 'draft: true') {
+  const matches = content.match(DRAFT_FIELD_MARKER) ?? [];
+  if (matches.length !== 1 || matches[0] !== expected) {
+    throw new Error(
+      `Article content must contain exactly one draft marker and it must be ${expected}`,
+    );
   }
 }
 
@@ -125,10 +127,7 @@ function exactSingleMatch(content, pattern, label) {
 
 function validateFinalizedArticle(content, publicationDate) {
   assertValidDate(publicationDate);
-  exactSingleMatch(content, FINAL_MARKER, 'draft: false marker');
-  if ((content.match(DRAFT_MARKER) ?? []).length !== 0) {
-    throw new Error('Finalized article must not contain a draft: true marker');
-  }
+  assertOneDraftMarker(content, 'draft: false');
 
   const dateMatch = exactSingleMatch(content, DATE_MARKER, 'date field');
   const lastmodMatch = exactSingleMatch(content, LASTMOD_MARKER, 'lastmod field');
@@ -172,6 +171,7 @@ export function createArticleOperations(options) {
   const context = {
     rootPromise: resolveProjectRoot(options.projectRoot),
     atomicWriteImpl: options.atomicWriteImpl ?? atomicWrite,
+    beforePublishCommit: options.beforePublishCommit,
     beforeLedgerRename: options.beforeLedgerRename,
   };
   return {
@@ -346,8 +346,19 @@ export async function publishArticle({ slug, publicationDate }, context) {
     if (await optionalLstat(published)) {
       throw new Error('Published article target changed before final rename');
     }
-    await rename(articleStage, published);
+    await context.beforePublishCommit?.({ published, articleStage });
+    try {
+      await link(articleStage, published);
+    } catch (error) {
+      if (error?.code === 'EEXIST') {
+        throw new Error('Published article collision at commit boundary', {
+          cause: error,
+        });
+      }
+      throw error;
+    }
     publishedMoved = true;
+    await rm(articleStage);
 
     if (ledgerUpdated) {
       await ledgerTarget(context);

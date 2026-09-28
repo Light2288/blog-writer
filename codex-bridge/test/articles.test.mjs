@@ -235,6 +235,31 @@ test('finalizeArticle_rejects_missing_duplicate_already_final_and_invalid_UTF_8'
   }
 });
 
+test('finalizeArticle_rejects_conflicting_or_invalid_additional_draft_markers_without_changes', async (t) => {
+  const cases = [
+    DRAFT.replace('draft: true', 'draft: true\ndraft: false'),
+    DRAFT.replace('draft: true', 'draft: true\ndraft: maybe'),
+  ];
+
+  for (const [index, content] of cases.entries()) {
+    await t.test(`case-${index}`, async (subtest) => {
+      const root = await temporaryProject(subtest);
+      await writeFile(draftTarget(root), content);
+      const before = await readFile(draftTarget(root));
+      const operations = createArticleOperations({ projectRoot: root });
+
+      await assert.rejects(
+        operations.finalizeArticle({ slug: SLUG }),
+        /exactly one.*draft|draft marker/i,
+      );
+      assert.deepEqual(await readFile(draftTarget(root)), before);
+      assert.deepEqual(await readdir(path.join(root, 'drafts')), [
+        'bounded-article.mdx',
+      ]);
+    });
+  }
+});
+
 test('createWriterHandlers_exposes_only_scoped_writer_tools_and_arguments', async (t) => {
   const root = await temporaryProject(t);
   const handlers = createWriterHandlers({ projectRoot: root });
@@ -362,6 +387,45 @@ test('publishArticle_rejects_a_published_collision_before_moving_the_draft', asy
     /published.*exists|collision|overwrite/i,
   );
   assert.deepEqual(await projectState(root), before);
+});
+
+test('publishArticle_does_not_clobber_a_destination_created_at_commit_boundary', async (t) => {
+  const root = await temporaryProject(t);
+  const finalized = DRAFT.replace('draft: true', 'draft: false');
+  const ledger = '# Published topics\n\n- prior-topic | prior-article | published 2026-09-20\n';
+  const competitor = 'competitor published bytes\n';
+  await writeFile(draftTarget(root), finalized);
+  await writeFile(ledgerTarget(root), ledger);
+  let hookCalls = 0;
+  const operations = createArticleOperations({
+    projectRoot: root,
+    beforePublishCommit: async ({ published }) => {
+      hookCalls += 1;
+      await writeFile(published, competitor, { flag: 'wx' });
+    },
+  });
+
+  await assert.rejects(
+    operations.publishArticle({
+      slug: SLUG,
+      publicationDate: '2026-09-28',
+    }),
+    /collision|exists|publication failed/i,
+  );
+
+  assert.equal(hookCalls, 1);
+  assert.equal(await readFile(publishedTarget(root), 'utf8'), competitor);
+  assert.equal(await readFile(draftTarget(root), 'utf8'), finalized);
+  assert.equal(await readFile(ledgerTarget(root), 'utf8'), ledger);
+  assert.deepEqual(await readdir(path.join(root, 'drafts')), [
+    'bounded-article.mdx',
+  ]);
+  assert.deepEqual(await readdir(path.join(root, 'published')), [
+    'bounded-article.mdx',
+  ]);
+  assert.deepEqual(await readdir(path.join(root, 'inputs')), [
+    'published-topics.md',
+  ]);
 });
 
 test('publishArticle_does_not_move_a_draft_replaced_after_validation', async (t) => {
