@@ -16,8 +16,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT"
 
-# Stable order: steps 01 -> 05.
-SCRIPTS=(
+# Stable order: preserve the complete OpenCode suite first.
+LEGACY_SCRIPTS=(
   "tests/scaffold_check.sh"
   "tests/extract_topics_check.sh"
   "tests/conventions_check.sh"
@@ -30,12 +30,13 @@ SCRIPTS=(
 FAIL=0
 declare -a RESULTS=()
 
-for s in "${SCRIPTS[@]}"; do
+run_script() {
+  local s="$1"
   if [ ! -f "$s" ]; then
     printf 'MISSING: %s\n' "$s"
     RESULTS+=("MISSING  $s")
     FAIL=1
-    continue
+    return
   fi
   printf '\n########## %s ##########\n' "$s"
   if bash "$s"; then
@@ -44,7 +45,25 @@ for s in "${SCRIPTS[@]}"; do
     RESULTS+=("FAIL     $s")
     FAIL=1
   fi
+}
+
+for s in "${LEGACY_SCRIPTS[@]}"; do
+  run_script "$s"
 done
+
+# Additive Codex checks remain offline and deterministic. The live Codex
+# verifier is intentionally excluded; run it explicitly with its env gate.
+run_script "tests/codex_scaffold_check.sh"
+
+printf '\n########## npm test --prefix codex-bridge ##########\n'
+if npm test --prefix codex-bridge; then
+  RESULTS+=("PASS     npm test --prefix codex-bridge")
+else
+  RESULTS+=("FAIL     npm test --prefix codex-bridge")
+  FAIL=1
+fi
+
+run_script "tests/codex_acceptance_check.sh"
 
 printf '\n================ SUITE SUMMARY ================\n'
 for r in "${RESULTS[@]}"; do

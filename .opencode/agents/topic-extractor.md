@@ -19,7 +19,7 @@ When invoked (e.g. "extract topics from last week"), load and follow the
 window, resolve tracked projects (the optional `tracked-projects.txt`
 allowlist, or auto-discovery from the opencode DB confirmed via `question`),
 gather git history and opencode sessions, correlate them by timestamp, redact
-secrets, and write a DRAFT `inputs/topics-YYYY-Www.md` that you flip to FINAL
+secrets, and write a DRAFT `inputs/topics-YYYY-MM-DD.md` that you flip to FINAL
 only on the user's explicit approval.
 
 ## Invariants

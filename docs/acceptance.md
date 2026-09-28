@@ -5,14 +5,17 @@ project against every acceptance criterion in
 [`specs/blog-writer-project.md`](../specs/blog-writer-project.md), as decomposed
 by [`specs/steps/05-end-to-end-acceptance.md`](../specs/steps/05-end-to-end-acceptance.md).
 
-It has two layers:
+It covers both OpenCode and Codex in three layers:
 
-- **Automated mechanical checks** — shell scripts under `tests/` that assert
-  file existence, content/frontmatter shape, the permission deny matrix, and
-  read-only SQL usage. These run on a fresh clone with no model or network.
-- **A manual runtime script** — the agent-conversation scenarios that can only
-  be observed by actually invoking the agents inside opencode. Each carries a
-  precise prompt and its expected observation (PASS).
+- **Automated deterministic checks** — shell scripts plus the bridge's Node
+  tests. They assert both runtime scaffolds, shared formats, permission and
+  path boundaries, synthetic history behavior, and read-only SQL usage. They
+  run with no model, network, or real Codex-history access.
+- **OpenCode runtime scenarios** — agent conversations that require a running
+  OpenCode session.
+- **An opt-in live Codex verifier** — isolated skill, custom-agent, MCP, and
+  read-only sandbox probes that consume model calls only when explicitly
+  enabled.
 
 Where full automation is impractical (agent conversations), the manual script
 below documents the exact observation to look for. The mechanical checks cover
@@ -20,9 +23,10 @@ everything statically verifiable.
 
 ## Prerequisites
 
-- `git` and `sqlite3` on your `PATH`.
-- Python 3 on your `PATH` (the harness uses it for JSON assertions).
-- The opencode session database at `~/.local/share/opencode/opencode.db`.
+- `git`, `sqlite3`, Node.js 20+, npm, and Python 3 on your `PATH` (the harness
+  uses Python for JSON assertions).
+- For OpenCode, the session database at
+  `~/.local/share/opencode/opencode.db`.
   Confirm read-only access — this is also the **DB-unavailable** guard: if this
   command fails, stop and fix the DB path before running the runtime scenarios,
   rather than proceeding with a broken prerequisite:
@@ -31,9 +35,29 @@ everything statically verifiable.
   sqlite3 -readonly ~/.local/share/opencode/opencode.db ".tables"
   ```
 
-- For the **runtime** scenarios (and the opt-in live permission checks), quit
-  and **restart opencode** first so `.opencode/opencode.json`, the agents, and
-  the skills are loaded (config is not hot-reloaded).
+- Install the pinned Codex bridge dependency:
+
+  ```bash
+  npm install --prefix codex-bridge
+  ```
+
+- For OpenCode runtime scenarios, quit and **restart OpenCode** first so
+  `.opencode/opencode.json`, the agents, and the skills are loaded.
+- For Codex runtime scenarios, trust this project in Codex CLI or Codex
+  desktop, then **restart Codex** after changing `.codex/config.toml`,
+  `.codex/agents/`, or `.agents/skills/`.
+
+Codex history is read through a bounded rollout adapter below
+`~/.codex/sessions/**/*.jsonl`. This path and its JSONL record shape are local
+adapter details, not a stable public database contract. The deterministic
+suite substitutes synthetic rollouts and never reads that path. Internal Codex
+SQLite, ChatGPT web history, and hosted account history are out of scope.
+
+The main Codex chat has no privileged bridge registration. Each read-only
+custom agent starts only its matching `topic`, `conventions`, or `writer`
+profile. The bridge exposes no general shell tool, arbitrary-path file tool,
+or caller-supplied project root; its mutation operations validate fixed
+project-relative targets.
 
 ## Automated checks
 
@@ -54,6 +78,10 @@ Or run each verifier individually:
 | `tests/acceptance_check.sh` | Step 05 system-wide static checks (fresh-clone readiness, DRAFT-first markers, bilingual + MDX vocabulary, read-only SQL, and this doc's scenario/verifier coverage). |
 | `tests/permission_check.sh` | Step 05 permission boundary & destructive-command denial (config-level always; live runtime opt-in via `ACCEPTANCE_RUNTIME=1`). |
 | `tests/redaction_check.sh` | Step 05 deterministic redaction/flagging using fixtures (no live DB). |
+| `tests/codex_scaffold_check.sh` | Codex skill discovery anchors, custom-agent profile isolation, and read-only project configuration. |
+| `npm test --prefix codex-bridge` | Bridge unit/integration behavior using synthetic rollout and temporary Git/project fixtures. |
+| `tests/codex_acceptance_check.sh` | Cross-runtime AC-01 through AC-19 static/deterministic anchors and documentation contracts. |
+| `tests/codex_live_check.sh` | Opt-in live Codex checks; defaults to `SKIP` and is never called by `run_all.sh`. |
 
 Every script prints `PASS:` / `FAIL:` / `SKIP:` lines and exits non-zero on any
 failure. `SKIP` (used only for the opt-in live runtime cases) is not a failure.
@@ -75,10 +103,33 @@ write / destructive command and asserts the forbidden target was never created.
 It consumes model calls and needs network/credentials, so it is opt-in and not
 part of the default mechanical suite.
 
-## Manual runtime script
+### Opt-in live Codex proof
 
-Restart opencode, then walk these scenarios inside the project. For each, send
+The live Codex entry point is separate from the deterministic suite:
+
+```bash
+CODEX_ACCEPTANCE_RUNTIME=1 bash tests/codex_live_check.sh
+```
+
+When the variable is unset, the script prints `SKIP` and exits 0. When enabled,
+it creates a temporary trusted fixture project and isolated `CODEX_HOME`, copies
+only authentication material needed for the invocation, and provides synthetic
+rollout history. It verifies repository skill and custom-agent visibility,
+exact MCP tool lists for the `topic`, `conventions`, and `writer` profiles, a
+rejected direct write in the read-only Codex sandbox, and a successful scoped
+MCP write inside the fixture. It never uses the real rollout store for a write
+or destructive-boundary probe.
+
+## OpenCode manual runtime script
+
+Restart OpenCode, then walk these scenarios inside the project. For each, send
 the prompt and confirm the expected observation.
+
+For a manual Codex smoke test in a trusted project chat, use “Use
+`extract-topics` to find topics from last week”, “Use `write-blog-article` to
+write about topic 2”, or “Use `author-conventions` to complete the writing
+conventions”. The main chat must keep the review questions and approvals while
+delegating only bounded operations to the matching custom agent.
 
 ### Scenario 1 — Fresh-clone readiness
 
@@ -208,5 +259,6 @@ read-only SQL assertion in `bash tests/acceptance_check.sh`.
   than aborting the run.
 - **Empty commit/session window for a project**: skipped silently and noted in
   the topics appendix.
-- **Fixtures vs. live data**: the redaction and permission checks use fixtures
-  and a temp scratch dir, never the live DB, to stay deterministic.
+- **Fixtures vs. live data**: default checks use synthetic rollouts, temporary
+  Git repositories, and temporary projects. They never inspect real Codex
+  history or invoke a model.

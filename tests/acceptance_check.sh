@@ -86,6 +86,13 @@ fi
 
 echo "== Scenarios 2 & 6: extractor DRAFT-first =="
 assert_nonempty "$EXTRACT_SKILL"
+assert_contains "$EXTRACT_AGENT" "inputs/topics-YYYY-MM-DD.md" \
+  "topic-extractor agent uses the run-date filename"
+if grep -qF -- "inputs/topics-YYYY-Www.md" "$EXTRACT_AGENT"; then
+  fail "topic-extractor agent retains the obsolete ISO-week filename"
+else
+  pass "topic-extractor agent has no ISO-week filename contradiction"
+fi
 assert_contains "$EXTRACT_SKILL" "Status: DRAFT" "extract-topics writes Status: DRAFT"
 assert_contains "$EXTRACT_SKILL" "FINAL" "extract-topics flips to FINAL on approval"
 assert_contains_ci "$EXTRACT_SKILL" "never embed" "extract-topics never embeds the file body in a question"
@@ -153,9 +160,13 @@ if [ -f "$ACCEPTANCE_DOC" ]; then
     fi
   done
   for s in scaffold_check.sh extract_topics_check.sh conventions_check.sh \
-           blog_writer_check.sh permission_check.sh redaction_check.sh; do
+           blog_writer_check.sh permission_check.sh redaction_check.sh \
+           codex_scaffold_check.sh codex_acceptance_check.sh \
+           codex_live_check.sh; do
     assert_contains "$ACCEPTANCE_DOC" "$s" "acceptance doc names verifier: $s"
   done
+  assert_contains "$ACCEPTANCE_DOC" "npm test --prefix codex-bridge" \
+    "acceptance doc names the bridge unit/integration verifier"
 fi
 
 echo
