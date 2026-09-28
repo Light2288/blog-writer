@@ -153,8 +153,9 @@ assert_file .codex/agents/conventions-writer.toml
 
 if [ -f .codex/config.toml ]; then
   python3 - <<'PY'
+import pathlib
+import re
 import sys
-import tomllib
 
 failed = False
 
@@ -166,36 +167,22 @@ def fail(message):
     print(f"FAIL: {message}")
     failed = True
 
-with open('.codex/config.toml', 'rb') as handle:
-    try:
-        config = tomllib.load(handle)
-        passed('.codex/config.toml is valid TOML')
-    except Exception as error:
-        fail(f'.codex/config.toml is invalid TOML: {error}')
-        sys.exit(1)
-
-if config.get('sandbox_mode') == 'read-only':
+text = pathlib.Path('.codex/config.toml').read_text(encoding='utf-8')
+pattern = re.compile(
+    r'\Asandbox_mode = "read-only"\n\n'
+    r'\[features\]\nmulti_agent = true\n\n'
+    r'\[agents\]\nmax_threads = 3\nmax_depth = 1\n?\Z'
+)
+if pattern.fullmatch(text):
+    passed('.codex/config.toml uses the supported static TOML shape')
     passed('main Codex sandbox is read-only')
-else:
-    fail('main Codex sandbox must be read-only')
-
-if config.get('features', {}).get('multi_agent') is True:
     passed('multi-agent behavior is enabled')
-else:
-    fail('features.multi_agent must be true')
-
-agents = config.get('agents')
-if isinstance(agents, dict) and agents.get('max_threads') == 3:
     passed('main config bounds custom-agent concurrency')
-else:
-    fail('agents.max_threads must be 3')
-
-if isinstance(agents, dict) and agents.get('max_depth') == 1:
     passed('custom agents cannot delegate to nested agents')
 else:
-    fail('agents.max_depth must be 1')
+    fail('.codex/config.toml must match the guarded project configuration')
 
-if 'mcp_servers' not in config:
+if '[mcp_servers' not in text:
     passed('main chat has no privileged MCP registration')
 else:
     fail('main config must not contain an mcp_servers table')
@@ -206,9 +193,10 @@ PY
 fi
 
 python3 - <<'PY'
+import ast
 import pathlib
+import re
 import sys
-import tomllib
 
 expected = {
     'topic-extractor': {
@@ -238,26 +226,35 @@ for role, wanted in expected.items():
     path = pathlib.Path('.codex/agents') / f'{role}.toml'
     if not path.is_file():
         continue
-    try:
-        with path.open('rb') as handle:
-            config = tomllib.load(handle)
-        passed(f'{path} is valid TOML')
-    except Exception as error:
-        fail(f'{path} is invalid TOML: {error}')
+    text = path.read_text(encoding='utf-8')
+    match = re.fullmatch(
+        r'name = "(?P<name>[^"\n]+)"\n'
+        r'description = "(?P<description>[^"\n]+)"\n'
+        r'developer_instructions = """\n(?P<instructions>.*?)\n"""\n'
+        r'sandbox_mode = "(?P<sandbox>[^"\n]+)"\n\n'
+        r'\[mcp_servers\.(?P<server>[^\]\n]+)\]\n'
+        r'command = "(?P<command>[^"\n]+)"\n'
+        r'args = (?P<args>\[[^\n]+\])\n?',
+        text,
+        flags=re.DOTALL,
+    )
+    if match is None:
+        fail(f'{path} does not use the supported static TOML shape')
         continue
+    passed(f'{path} uses the supported static TOML shape')
 
-    if config.get('name') == role:
+    if match.group('name') == role:
         passed(f'{role} has the exact name')
     else:
         fail(f'{role} must declare name = {role!r}')
 
-    if config.get('description') == wanted['description']:
+    if match.group('description') == wanted['description']:
         passed(f'{role} has the exact description')
     else:
         fail(f'{role} description is not exact')
 
-    instructions = config.get('developer_instructions')
-    if isinstance(instructions, str) and instructions.strip():
+    instructions = match.group('instructions')
+    if instructions.strip():
         passed(f'{role} has developer instructions')
         for required in (
             'Never ask the user questions',
@@ -270,23 +267,17 @@ for role, wanted in expected.items():
     else:
         fail(f'{role} must have non-empty developer_instructions')
 
-    if config.get('sandbox_mode') == 'read-only':
+    if match.group('sandbox') == 'read-only':
         passed(f'{role} sandbox is read-only')
     else:
         fail(f'{role} sandbox must be read-only')
 
-    servers = config.get('mcp_servers')
-    if not isinstance(servers, dict) or len(servers) != 1:
-        fail(f'{role} must configure exactly one MCP server')
-        continue
-
-    server_name, server = next(iter(servers.items()))
-    if server_name == 'blog_writer_bridge':
+    if match.group('server') == 'blog_writer_bridge':
         passed(f'{role} uses the canonical bridge registration name')
     else:
         fail(f'{role} must name its MCP registration blog_writer_bridge')
 
-    if server.get('command') == 'node':
+    if match.group('command') == 'node':
         passed(f'{role} starts the bridge with node')
     else:
         fail(f'{role} bridge command must be node')
@@ -296,7 +287,11 @@ for role, wanted in expected.items():
         '--profile',
         wanted['profile'],
     ]
-    if server.get('args') == wanted_args:
+    try:
+        actual_args = ast.literal_eval(match.group('args'))
+    except (SyntaxError, ValueError):
+        actual_args = None
+    if actual_args == wanted_args:
         passed(f"{role} is isolated to the {wanted['profile']} profile")
     else:
         fail(f'{role} bridge args must be {wanted_args!r}')
