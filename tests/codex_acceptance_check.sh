@@ -93,6 +93,22 @@ PATTERNS = (
     ),
 )
 
+SQLITE_PROHIBITION = re.compile(
+    r"^\s*(?:[-*]\s+)?(?:do not|don't|never)\s+"
+    r"(?:use|run|invoke|execute)\s+"
+    r"[^=;{}()]*?(?:['\"`]sqlite3['\"`]|\bsqlite3\b)"
+    r"[^=;{}()]*[.!]?\s*$",
+    re.I,
+)
+
+def allowed_sqlite_prohibition(line):
+    return (
+        SQLITE_PROHIBITION.fullmatch(line) is not None
+        and "//" not in line
+        and "&&" not in line
+        and "||" not in line
+    )
+
 violations = []
 for raw_root in sys.argv[1:]:
     root = Path(raw_root)
@@ -105,6 +121,8 @@ for raw_root in sys.argv[1:]:
         for number, line in enumerate(lines, 1):
             for label, pattern in PATTERNS:
                 if pattern.search(line):
+                    if label == "SQLite module or CLI" and allowed_sqlite_prohibition(line):
+                        continue
                     violations.append(f"{path}:{number}: {label}")
 
 if violations:
@@ -197,7 +215,8 @@ fi
 
 INGESTION_FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/codex-ingestion-guard.XXXXXX")"
 printf '%s\n' \
-  'Internal Codex SQLite and ChatGPT web history are unsupported.' \
+  'Do not use the "sqlite3" executable to read internal Codex history.' \
+  'ChatGPT web history is unsupported.' \
   > "$INGESTION_FIXTURE/allowed.md"
 if scan_forbidden_ingestion "$INGESTION_FIXTURE/allowed.md"; then
   pass "forbidden-ingestion guard permits negative/out-of-scope documentation"
@@ -213,7 +232,7 @@ if scan_forbidden_ingestion "$INGESTION_FIXTURE/forbidden.mjs" >/dev/null 2>&1; 
 else
   pass "forbidden-ingestion guard rejects synthetic SQLite/ChatGPT connectors"
 fi
-printf '%s\n' "const executable = 'sqlite3';" \
+printf '%s\n' "const executable = 'sqlite3'; // never log database contents" \
   > "$INGESTION_FIXTURE/sqlite-cli.mjs"
 if scan_forbidden_ingestion "$INGESTION_FIXTURE/sqlite-cli.mjs" >/dev/null 2>&1; then
   fail "forbidden-ingestion guard missed a quoted sqlite3 executable"
@@ -291,8 +310,8 @@ assert_contains "$LIVE_CHECK" 'verify_agent_events' \
   "live Codex checks validate structured agent events"
 assert_contains "$LIVE_CHECK" 'skill_name' \
   "live Codex checks require structured repository-skill identity"
-assert_contains "$LIVE_CHECK" 'shared_agent_ids' \
-  "live Codex checks correlate agent and MCP evidence by structured identity"
+assert_contains "$LIVE_CHECK" 'candidate_child_ids' \
+  "live Codex checks evaluate one correlated child identity at a time"
 assert_contains "$LIVE_CHECK" 'mcp_tool_call' \
   "live Codex checks require structured MCP tool-call evidence"
 assert_contains "$LIVE_CHECK" 'surface == profile_tools' \
@@ -315,6 +334,12 @@ for contract in \
 done
 assert_absent "$LIVE_CHECK" 'grep -qF -- "$name" "$DISCOVERY_OUTPUT"' \
   "live Codex discovery never treats assistant prose as evidence"
+assert_file tests/codex_live_events_check.py
+if python3 tests/codex_live_events_check.py; then
+  pass "offline structured-event fixtures enforce single-child live evidence"
+else
+  fail "offline structured-event fixtures reject live-event correlation behavior"
+fi
 
 echo "== AC-18: dual-runtime setup and privacy documentation =="
 for doc in README.md docs/acceptance.md; do

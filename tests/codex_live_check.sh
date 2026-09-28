@@ -14,10 +14,10 @@ fail() { printf 'FAIL: %s\n' "$1"; }
 needs_context() { printf 'NEEDS_CONTEXT: %s\n' "$1"; exit 2; }
 skip() { printf 'SKIP: %s\n' "$1"; }
 
-# verify_agent_events <events.jsonl> <skill> <agent> <profile> <tool> <arg-key> <arg-value>
+# verify_agent_events <events.jsonl> <skill> <agent> <profile> <tool> <arg-key> <arg-value> <expected-args-json>
 # Only structured Codex events count. Assistant text is intentionally ignored.
 verify_agent_events() {
-  python3 - "$1" "$2" "$3" "$4" "$5" "$6" "$7" <<'PY'
+  python3 - "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" <<'PY'
 import json
 import sys
 
@@ -29,7 +29,19 @@ import sys
     expected_tool,
     expected_arg_key,
     expected_arg_value,
+    expected_arguments_json,
 ) = sys.argv[1:]
+try:
+    expected_arguments = json.loads(expected_arguments_json)
+except json.JSONDecodeError:
+    print("NEEDS_CONTEXT: expected MCP arguments are not valid JSON", file=sys.stderr)
+    raise SystemExit(2)
+if not isinstance(expected_arguments, dict):
+    print("NEEDS_CONTEXT: expected MCP arguments must be a JSON object", file=sys.stderr)
+    raise SystemExit(2)
+if expected_arg_value not in str(expected_arguments.get(expected_arg_key, "")):
+    print("NEEDS_CONTEXT: expected MCP argument sentinel is inconsistent", file=sys.stderr)
+    raise SystemExit(2)
 profile_tools = {
     "topic-extractor": {
         "discover_projects",
@@ -112,6 +124,15 @@ def values_for_keys(value, keys):
                 values.add(str(candidate))
     return values
 
+def direct_values_for_keys(value, keys):
+    if not isinstance(value, dict):
+        return set()
+    return {
+        str(value[key])
+        for key in keys
+        if isinstance(value.get(key), (str, int)) and str(value[key])
+    }
+
 def child_ids(value):
     return values_for_keys(
         value,
@@ -127,10 +148,22 @@ def child_ids(value):
         },
     )
 
-def association_ids(value):
-    return child_ids(value) | values_for_keys(
+def direct_association_ids(value):
+    return direct_values_for_keys(
         value,
-        {"agent_id", "thread_id", "conversation_id"},
+        {
+            "agent_id",
+            "agent_thread_id",
+            "child_agent_id",
+            "child_thread_id",
+            "conversation_id",
+            "receiver_thread_id",
+            "spawned_agent_id",
+            "spawned_thread_id",
+            "target_agent_id",
+            "target_thread_id",
+            "thread_id",
+        },
     )
 
 def descriptor(node):
@@ -146,6 +179,20 @@ def canonical_tool(value):
         if value == known or value.endswith(f"__{known}"):
             return known
     return None
+
+def normalized_surface_tool(value):
+    if not isinstance(value, str):
+        return None
+    prefixes = (
+        "mcp__blog_writer_bridge__",
+        "blog_writer_bridge__",
+        "mcp__blog-writer-codex-bridge__",
+        "blog-writer-codex-bridge__",
+    )
+    for prefix in prefixes:
+        if value.startswith(prefix):
+            return value[len(prefix):]
+    return value
 
 def tool_name(node):
     for key in ("tool", "tool_name", "name"):
@@ -220,11 +267,9 @@ def surface_names(node):
                 candidate = value.get("name") or value.get("tool") or value.get("tool_name")
             else:
                 continue
-            known = canonical_tool(candidate)
-            if known:
-                names.add(known)
-            elif isinstance(candidate, str) and "blog_writer_bridge" in candidate:
-                names.add(candidate.rsplit("__", 1)[-1])
+            normalized = normalized_surface_tool(candidate)
+            if normalized:
+                names.add(normalized)
     return names
 
 def server_names(value):
@@ -248,6 +293,13 @@ def profile_names(value):
                     profiles.add(args[index + 1])
     return profiles
 
+def expected_server(names):
+    return any(
+        name in {"blog_writer_bridge", "blog-writer-codex-bridge"}
+        or name.endswith("__blog_writer_bridge")
+        for name in names
+    )
+
 skill_seen = any(structured_skill(event) for event in events)
 spawn_records = []
 tool_events = []
@@ -261,7 +313,9 @@ for event in events:
             and structured_agent(node)
         ):
             spawn_records.append({"ids": child_ids(node), "node": node})
-        ids = association_ids(event) | association_ids(node)
+        ids = direct_association_ids(event) | direct_association_ids(node)
+        servers = server_names(event) | server_names(node)
+        profiles = profile_names(event) | profile_names(node)
         name = tool_name(node)
         if name and (
             "mcp_tool_call" in desc
@@ -277,10 +331,8 @@ for event in events:
                 }
             )
         surface = surface_names(node)
-        if surface:
+        if surface and expected_server(servers):
             surface_events.append({"surface": surface, "node": node, "ids": ids})
-        servers = server_names(node)
-        profiles = profile_names(node)
         if servers or profiles:
             metadata_events.append(
                 {"servers": servers, "profiles": profiles, "ids": ids}
@@ -291,69 +343,90 @@ mcp_agent_ids = set().union(
     *(record["ids"] for record in tool_events + surface_events),
     set(),
 )
-shared_agent_ids = spawn_agent_ids & mcp_agent_ids
+candidate_child_ids = sorted(spawn_agent_ids & mcp_agent_ids)
+candidate_results = {}
+unsafe_cross_role_calls = []
+for child_id in candidate_child_ids:
+    child_tools = [record for record in tool_events if child_id in record["ids"]]
+    child_surfaces = [
+        record for record in surface_events if child_id in record["ids"]
+    ]
+    child_metadata = [
+        record for record in metadata_events if child_id in record["ids"]
+    ]
 
-def correlated(record):
-    return bool(record["ids"] & shared_agent_ids)
+    unexpected_success = sorted(
+        {
+            record["name"]
+            for record in child_tools
+            if record["name"] in cross_role_tools
+            and terminal_call(record["node"], record["event_type"])
+            and not failed_call(record["node"])
+        }
+    )
+    if unexpected_success:
+        unsafe_cross_role_calls.append((child_id, unexpected_success))
 
-correlated_tools = [record for record in tool_events if correlated(record)]
-correlated_surfaces = [record for record in surface_events if correlated(record)]
-correlated_metadata = [record for record in metadata_events if correlated(record)]
-
-unexpected_success = sorted(
-    {
+    surface = set().union(
+        *(record["surface"] for record in child_surfaces),
+        set(),
+    )
+    exact_surface = bool(child_surfaces) and surface == profile_tools[expected_agent]
+    unknown_surface_tools = surface - all_tools
+    observed_allowed_tools = {
         record["name"]
-        for record in correlated_tools
+        for record in child_tools
+        if record["name"] in profile_tools[expected_agent]
+    }
+    observed_allowed_tools.update(surface & profile_tools[expected_agent])
+    rejected_cross_role_tools = {
+        record["name"]
+        for record in child_tools
         if record["name"] in cross_role_tools
         and terminal_call(record["node"], record["event_type"])
-        and not failed_call(record["node"])
+        and unavailable_call(record["node"])
     }
-)
-exact_surface = any(
-    surface == profile_tools[expected_agent]
-    for surface in (record["surface"] for record in correlated_surfaces)
-)
-observed_allowed_tools = {
-    record["name"]
-    for record in correlated_tools
-    if record["name"] in profile_tools[expected_agent]
-}
-for record in correlated_surfaces:
-    observed_allowed_tools.update(
-        record["surface"] & profile_tools[expected_agent]
+    fallback_surface = (
+        not unknown_surface_tools
+        and observed_allowed_tools == profile_tools[expected_agent]
+        and rejected_cross_role_tools == cross_role_tools
     )
-rejected_cross_role_tools = {
-    record["name"]
-    for record in correlated_tools
-    if record["name"] in cross_role_tools
-    and terminal_call(record["node"], record["event_type"])
-    and unavailable_call(record["node"])
-}
-fallback_surface = (
-    observed_allowed_tools == profile_tools[expected_agent]
-    and rejected_cross_role_tools == cross_role_tools
-)
-primary_calls = [
-    record
-    for record in correlated_tools
-    if record["name"] == expected_tool
-    and terminal_call(record["node"], record["event_type"])
-    and not failed_call(record["node"])
-    and expected_arg_value
-    in str(tool_arguments(record["node"]).get(expected_arg_key, ""))
+    primary_calls = [
+        record
+        for record in child_tools
+        if record["name"] == expected_tool
+        and terminal_call(record["node"], record["event_type"])
+        and not failed_call(record["node"])
+        and tool_arguments(record["node"]) == expected_arguments
+    ]
+    server_verified = any(
+        expected_server(record["servers"])
+        for record in child_metadata
+    )
+    profile_verified = any(
+        expected_profile in record["profiles"]
+        for record in child_metadata
+    )
+
+    missing = []
+    if not server_verified:
+        missing.append("MCP server blog_writer_bridge")
+    if not profile_verified:
+        missing.append(f"MCP profile {expected_profile}")
+    if not primary_calls:
+        missing.append(
+            f"successful mcp_tool_call {expected_tool} with exact sentinel arguments"
+        )
+    if not (exact_surface or fallback_surface):
+        missing.append(
+            "exact role tool catalog or fallback evidence for all allowed tools "
+            "and every cross-role rejection"
+        )
+    candidate_results[child_id] = missing
+
+valid_child_ids = [
+    child_id for child_id, missing in candidate_results.items() if not missing
 ]
-server_verified = any(
-    any(
-        server in {"blog_writer_bridge", "blog-writer-codex-bridge"}
-        or server.endswith("__blog_writer_bridge")
-        for server in record["servers"]
-    )
-    for record in correlated_metadata
-)
-profile_verified = any(
-    expected_profile in record["profiles"]
-    for record in correlated_metadata
-)
 schema = {
     "event_types": sorted({str(event.get("type")) for event in events}),
     "item_types": sorted(
@@ -374,7 +447,8 @@ schema = {
     ),
     "spawn_agent_ids": sorted(spawn_agent_ids),
     "mcp_agent_ids": sorted(mcp_agent_ids),
-    "shared_agent_ids": sorted(shared_agent_ids),
+    "candidate_child_ids": candidate_child_ids,
+    "candidate_missing": candidate_results,
     "structured_mcp_tools": sorted({record["name"] for record in tool_events}),
     "structured_tool_surfaces": [
         sorted(record["surface"]) for record in surface_events
@@ -387,9 +461,13 @@ schema = {
     ),
 }
 
-if unexpected_success:
+if unsafe_cross_role_calls:
+    details = "; ".join(
+        f"{child_id}: {', '.join(names)}"
+        for child_id, names in unsafe_cross_role_calls
+    )
     print(
-        f"FAIL: {expected_agent} completed cross-role MCP tool call(s): {', '.join(unexpected_success)}",
+        f"FAIL: {expected_agent} child completed cross-role MCP tool call(s): {details}",
         file=sys.stderr,
     )
     raise SystemExit(1)
@@ -400,21 +478,13 @@ if not spawn_records:
     missing.append(f"spawn identity {expected_agent}")
 elif not spawn_agent_ids:
     missing.append(f"child identifier for spawn {expected_agent}")
-if not shared_agent_ids:
-    missing.append(f"shared child identifier for {expected_agent} MCP evidence")
-if not server_verified:
-    missing.append("MCP server blog_writer_bridge")
-if not profile_verified:
-    missing.append(f"MCP profile {expected_profile}")
-if not primary_calls:
+if not candidate_child_ids:
+    missing.append(f"child-scoped {expected_agent} MCP evidence")
+elif not valid_child_ids:
+    missing.append("one child satisfying every structured evidence requirement")
+elif len(valid_child_ids) > 1:
     missing.append(
-        f"successful mcp_tool_call {expected_tool} with "
-        f"{expected_arg_key}={expected_arg_value}"
-    )
-if not (exact_surface or fallback_surface):
-    missing.append(
-        "exact role tool catalog or fallback evidence for all allowed tools "
-        "and every cross-role rejection"
+        "one unambiguous child satisfying every structured evidence requirement"
     )
 if missing:
     print(
@@ -425,8 +495,15 @@ if missing:
         file=sys.stderr,
     )
     raise SystemExit(2)
+chosen_child_id = valid_child_ids[0]
+print(chosen_child_id)
 PY
 }
+
+if [ "${CODEX_LIVE_EVENT_FIXTURE:-}" = "1" ]; then
+  verify_agent_events "$@"
+  exit $?
+fi
 
 if [ "${CODEX_ACCEPTANCE_RUNTIME:-}" != "1" ]; then
   skip "live Codex cases (set CODEX_ACCEPTANCE_RUNTIME=1 to run isolated runtime probes)"
@@ -541,8 +618,8 @@ AGENT_CONTRACTS=(
 
 run_agent_probe() {
   local skill="$1" agent="$2" profile="$3" tool="$4"
-  local arg_key="$5" arg_value="$6" effect_path="$7" effect_needle="$8"
-  local prompt="$9"
+  local arg_key="$5" arg_value="$6" expected_arguments="$7"
+  local effect_path="$8" effect_content="$9" prompt="${10}"
   local events="$SCRATCH/${skill}-${agent}-events.jsonl"
 
   if [ -e "$effect_path" ]; then
@@ -555,22 +632,25 @@ run_agent_probe() {
     "$prompt" > "$events" 2>&1
   local codex_status=$?
 
-  verify_agent_events \
-    "$events" "$skill" "$agent" "$profile" "$tool" "$arg_key" "$arg_value"
+  local chosen_child_id
+  chosen_child_id="$(verify_agent_events \
+    "$events" "$skill" "$agent" "$profile" "$tool" "$arg_key" "$arg_value" \
+    "$expected_arguments")"
   local evidence_status=$?
   if [ "$evidence_status" -eq 2 ]; then
     exit 2
   elif [ "$evidence_status" -ne 0 ]; then
     exit 1
   fi
-  if [ ! -f "$effect_path" ] || ! grep -qF -- "$effect_needle" "$effect_path"; then
+  if [ ! -f "$effect_path" ] || \
+     ! cmp -s -- "$effect_path" <(printf '%s' "$effect_content"); then
     fail "$agent scoped fixture effect is missing or invalid"
     exit 1
   fi
   if [ "$codex_status" -ne 0 ]; then
     pass "$agent returned non-zero only after structured safe-call and isolation evidence"
   fi
-  pass "$skill invoked $agent, called $tool, and produced its correlated fixture effect"
+  pass "$skill child $chosen_child_id called $tool and produced its correlated fixture effect"
 }
 
 for contract in "${AGENT_CONTRACTS[@]}"; do
@@ -583,24 +663,27 @@ for contract in "${AGENT_CONTRACTS[@]}"; do
       profile="topic"
       arg_key="date"
       arg_value="2099-01-03"
+      expected_arguments='{"content":"# Agent fixture topics\n\nStatus: DRAFT\n","date":"2099-01-03","overwrite":false}'
       effect_path="$FIXTURE_PROJECT/inputs/topics-2099-01-03.md"
-      effect_needle="Status: DRAFT"
+      effect_content=$'# Agent fixture topics\n\nStatus: DRAFT\n'
       prompt="Invoke the repository skill named extract-topics through Codex's structured skill mechanism. Within that skill invocation, spawn the project custom agent named topic-extractor. The user explicitly approves this fixture persistence. Instruct only that agent to first call blog_writer_bridge.write_topic_draft with date 2099-01-03, content '# Agent fixture topics\n\nStatus: DRAFT\n', and overwrite false, then attempt blog_writer_bridge.write_conventions with content '# Cross-role convention probe\n\nThis must be unavailable.\n' and overwrite false so any accidental exposure would succeed. Wait for the agent. The main chat must not call MCP tools or write files, and prose about skill, agent, or tool availability is not evidence."
       ;;
     author-conventions:conventions-writer:write_conventions)
       profile="conventions"
       arg_key="content"
       arg_value="Use concise fixture prose."
+      expected_arguments='{"content":"# Writing conventions\n\nUse concise fixture prose.\n","overwrite":false}'
       effect_path="$FIXTURE_PROJECT/CONVENTIONS.md"
-      effect_needle="Use concise fixture prose."
+      effect_content=$'# Writing conventions\n\nUse concise fixture prose.\n'
       prompt="Invoke the repository skill named author-conventions through Codex's structured skill mechanism. Within that skill invocation, spawn the project custom agent named conventions-writer. The user explicitly approves this fixture persistence. Instruct only that agent to first call blog_writer_bridge.write_conventions with content '# Writing conventions\n\nUse concise fixture prose.\n' and overwrite false, then attempt blog_writer_bridge.write_article_draft with slug cross-role-article, content '---\ndraft: true\n---\n\nCross-role probe.\n', and overwrite false so any accidental exposure would succeed. Wait for the agent. The main chat must not call MCP tools or write files, and prose about skill, agent, or tool availability is not evidence."
       ;;
     write-blog-article:blog-writer:write_article_draft)
       profile="writer"
       arg_key="slug"
       arg_value="fixture-article"
+      expected_arguments='{"content":"---\ndraft: true\n---\n\nFixture article.\n","overwrite":false,"slug":"fixture-article"}'
       effect_path="$FIXTURE_PROJECT/drafts/fixture-article.mdx"
-      effect_needle="draft: true"
+      effect_content=$'---\ndraft: true\n---\n\nFixture article.\n'
       prompt="Invoke the repository skill named write-blog-article through Codex's structured skill mechanism. Within that skill invocation, spawn the project custom agent named blog-writer. The user explicitly approves this fixture persistence. Instruct only that agent to first call blog_writer_bridge.write_article_draft with slug fixture-article, content '---\ndraft: true\n---\n\nFixture article.\n', and overwrite false, then attempt blog_writer_bridge.write_topic_draft with date 2099-01-04, content '# Cross-role topics\n\nStatus: DRAFT\n', and overwrite false so any accidental exposure would succeed. Wait for the agent. The main chat must not call MCP tools or write files, and prose about skill, agent, or tool availability is not evidence."
       ;;
     *)
@@ -610,7 +693,7 @@ for contract in "${AGENT_CONTRACTS[@]}"; do
   esac
   run_agent_probe \
     "$skill" "$agent" "$profile" "$tool" "$arg_key" "$arg_value" \
-    "$effect_path" "$effect_needle" "$prompt"
+    "$expected_arguments" "$effect_path" "$effect_content" "$prompt"
 done
 pass "all repository-skill/custom-agent invocations produced scoped fixture effects"
 
