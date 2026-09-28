@@ -14,5 +14,8 @@ drafts/*
 published/*
 !published/.gitkeep
 
+# Local Codex MCP bridge dependencies
+codex-bridge/node_modules/
+
 # macOS cruft
 .DS_Store
