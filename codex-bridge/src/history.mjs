@@ -58,6 +58,7 @@ function sessionFor(sessions, id) {
       messageIds: new Set(),
       parts: [],
       totalParts: 0,
+      redactionReasons: new Set(),
     };
     sessions.set(id, session);
   }
@@ -85,8 +86,16 @@ function applyRecord(record, context) {
     }
     const session = sessionFor(sessions, id);
     session.cwd ??= cwd;
-    if (typeof record.payload.title === 'string' && record.payload.title) {
-      session.title ??= record.payload.title;
+    if (
+      session.title === null &&
+      typeof record.payload.title === 'string' &&
+      record.payload.title
+    ) {
+      const redacted = redactText(record.payload.title);
+      session.title = redacted.text.slice(0, LIMITS.charactersPerSession);
+      for (const reason of redacted.reasons) {
+        session.redactionReasons.add(reason);
+      }
     }
     updateLatest(session, timestamp);
     context.currentSessionId = id;
@@ -122,9 +131,13 @@ function applyRecord(record, context) {
       ) {
         session.totalParts += 1;
         if (session.parts.length < LIMITS.textPartsPerSession) {
+          const redacted = redactText(content.text);
+          for (const reason of redacted.reasons) {
+            session.redactionReasons.add(reason);
+          }
           session.parts.push({
             role: payload.role,
-            text: content.text.slice(0, LIMITS.charactersPerSession + 1),
+            text: redacted.text.slice(0, LIMITS.charactersPerSession + 1),
           });
         }
       }
@@ -182,21 +195,14 @@ async function parseRollout(file, context) {
 }
 
 function normalizeSession(session) {
-  const redactedTitle = redactText(
-    (session.title ?? 'Codex session').slice(0, LIMITS.charactersPerSession)
-  );
-  const reasons = [...redactedTitle.reasons];
+  const reasons = [...session.redactionReasons];
   let text = '';
   let includedParts = 0;
   let truncated = session.totalParts > LIMITS.textPartsPerSession;
 
   for (const part of session.parts) {
-    const redacted = redactText(part.text);
-    for (const reason of redacted.reasons) {
-      if (!reasons.includes(reason)) reasons.push(reason);
-    }
     const separator = text ? '\n' : '';
-    const rendered = `${part.role}: ${redacted.text}`;
+    const rendered = `${part.role}: ${part.text}`;
     const remaining = LIMITS.charactersPerSession - text.length;
     if (remaining <= 0) {
       truncated = true;
@@ -217,7 +223,7 @@ function normalizeSession(session) {
     timestamp: new Date(session.latestTimestamp).toISOString(),
     kind: 'session',
     id: session.id,
-    title: redactedTitle.text.slice(0, LIMITS.charactersPerSession),
+    title: session.title ?? 'Codex session',
     text,
     metadata: {
       redacted: reasons.length > 0,
@@ -240,6 +246,7 @@ export async function scanRollouts(options) {
   const warnings = [];
   const sessions = new Map();
   const unsupportedTypes = new Set();
+  const prunedFiles = [];
   const stats = {
     candidateFiles: files.length,
     scannedFiles: 0,
@@ -274,9 +281,22 @@ export async function scanRollouts(options) {
       });
       continue;
     }
-    if (fileStat.mtimeMs <= lo) continue;
+    if (fileStat.mtimeMs <= lo) {
+      prunedFiles.push(file);
+      continue;
+    }
     stats.scannedFiles += 1;
     if (await parseRollout(file, context)) stats.supportedFiles += 1;
+  }
+
+  if (stats.supportedRecords === 0) {
+    for (const file of prunedFiles) {
+      stats.scannedFiles += 1;
+      if (await parseRollout(file, context)) {
+        stats.supportedFiles += 1;
+        break;
+      }
+    }
   }
 
   if (stats.supportedRecords === 0) {

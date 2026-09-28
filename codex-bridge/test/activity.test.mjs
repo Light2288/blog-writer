@@ -136,13 +136,19 @@ test('collectActivity_fails_on_missing_history_but_accepts_a_valid_empty_window'
   );
 
   const home = await codexHome(t);
+  const outsideWindow = path.join(home.sessions, 'outside-window.jsonl');
   await writeRollout(
-    path.join(home.sessions, 'outside-window.jsonl'),
+    outsideWindow,
     rollout({
       id: 'outside-window',
       cwd: project,
       timestamp: '2026-09-19T12:00:00.000Z',
     })
+  );
+  await utimes(
+    outsideWindow,
+    new Date(LO - 1_000),
+    new Date(LO - 1_000)
   );
   const empty = await collectActivity({
     codexHome: home.root,

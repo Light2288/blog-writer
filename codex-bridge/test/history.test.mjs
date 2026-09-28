@@ -136,6 +136,32 @@ test('scanRollouts_filters_on_latest_record_with_open_closed_boundaries', async 
   assert.deepEqual(result.sessions.map(({ id }) => id), ['at-hi']);
 });
 
+test('scanRollouts_returns_empty_when_supported_history_is_older_than_the_window', async (t) => {
+  const home = await syntheticHome(t);
+  const target = path.join(home.sessions, 'older-supported.jsonl');
+  await writeFile(
+    target,
+    sessionLines({
+      id: 'older-supported',
+      timestamps: ['2026-09-28T08:00:00.000Z'],
+      parts: ['older work'],
+    })
+  );
+  await utimes(target, new Date(LO - 1_000), new Date(LO - 1_000));
+
+  const result = await scanRollouts({
+    codexHome: home.root,
+    lo: LO,
+    hi: HI,
+    confirmedProjects: [PROJECT_ALPHA],
+  });
+
+  assert.deepEqual(result.sessions, []);
+  assert.equal(result.stats.candidateFiles, 1);
+  assert.equal(result.stats.supportedFiles, 1);
+  assert.equal(result.stats.matchedSessions, 0);
+});
+
 test('scanRollouts_filters_working_directories_to_confirmed_projects', async (t) => {
   const home = await syntheticHome(t);
   await copyFixture(home, 'supported.jsonl');
@@ -205,6 +231,53 @@ test('scanRollouts_redacts_secret_like_session_titles', async (t) => {
   );
   assert.equal(result.sessions[0].metadata.redacted, true);
   assert.deepEqual(result.sessions[0].metadata.redaction_reasons, ['token']);
+});
+
+test('scanRollouts_redacts_complete_strings_before_output_caps', async (t) => {
+  const home = await syntheticHome(t);
+  const prefix = `${'p '.repeat(2_985)} `;
+  const secret = '0123456789abcdef0123456789abcdef';
+  const sensitiveText = `${prefix}${secret} safe-tail`;
+  const content = [
+    JSON.stringify({
+      timestamp: '2026-09-28T11:00:00.000Z',
+      type: 'session_meta',
+      payload: {
+        id: 'boundary-secret',
+        cwd: PROJECT_ALPHA,
+        title: sensitiveText,
+      },
+    }),
+    JSON.stringify({
+      timestamp: '2026-09-28T11:01:00.000Z',
+      type: 'response_item',
+      payload: {
+        id: 'boundary-secret-message',
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: sensitiveText }],
+      },
+    }),
+  ].join('\n');
+  await writeRollout(
+    path.join(home.sessions, 'boundary-secret.jsonl'),
+    `${content}\n`
+  );
+
+  const result = await scanRollouts({
+    codexHome: home.root,
+    lo: LO,
+    hi: HI,
+    confirmedProjects: [PROJECT_ALPHA],
+  });
+  const [session] = result.sessions;
+
+  assert.match(session.title, /\[REDACTED:hex-secret\]/);
+  assert.match(session.text, /\[REDACTED:hex-secret\]/);
+  assert.doesNotMatch(session.title, /0123456789abcdef/);
+  assert.doesNotMatch(session.text, /0123456789abcdef/);
+  assert.equal(session.metadata.redacted, true);
+  assert.deepEqual(session.metadata.redaction_reasons, ['hex-secret']);
 });
 
 test('scanRollouts_bounds_parts_and_characters_per_session', async (t) => {
@@ -306,7 +379,8 @@ test('scanRollouts_warns_safely_for_malformed_lines_and_ignores_mixed_unknown_re
 
 test('scanRollouts_fails_closed_for_missing_or_zero_supported_history', async (t) => {
   const home = await syntheticHome(t);
-  await copyFixture(home, 'unsupported.jsonl');
+  const unsupported = await copyFixture(home, 'unsupported.jsonl');
+  await utimes(unsupported, new Date(LO - 1_000), new Date(LO - 1_000));
 
   await assert.rejects(
     scanRollouts({
