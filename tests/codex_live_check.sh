@@ -623,17 +623,22 @@ def owner(event, node):
                 return value
     return "__parent__"
 
+bridge_tool_prefixes = (
+    "mcp__blog_writer_bridge__",
+    "blog-writer-codex-bridge__",
+    "blog_writer_bridge.",
+)
+
 def normalize_tool(value):
     if not isinstance(value, str):
         return None
-    for prefix in (
-        "mcp__blog_writer_bridge__",
-        "blog-writer-codex-bridge__",
-        "blog_writer_bridge.",
-    ):
+    for prefix in bridge_tool_prefixes:
         if value.startswith(prefix):
             return value[len(prefix):]
     return value
+
+def is_bridge_qualified_tool(value):
+    return isinstance(value, str) and value.startswith(bridge_tool_prefixes)
 
 def servers(node):
     values = set()
@@ -669,8 +674,13 @@ def call_name(node):
     if "mcp" not in desc and not is_bridge_server(servers(node)):
         return None
     for key in ("name", "tool", "tool_name"):
-        name = normalize_tool(node.get(key))
-        if name and (name in all_tools or is_bridge_server(servers(node))):
+        raw_name = node.get(key)
+        name = normalize_tool(raw_name)
+        if name and (
+            name in all_tools
+            or is_bridge_server(servers(node))
+            or is_bridge_qualified_tool(raw_name)
+        ):
             return name
     return None
 

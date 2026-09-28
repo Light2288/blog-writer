@@ -228,6 +228,21 @@ class LiveEventVerifierTests(unittest.TestCase):
             ]
         )
 
+    def test_command_fails_on_a_qualified_unknown_bridge_call_without_server(self):
+        unknown_call = direct_call_event()
+        del unknown_call["item"]["server"]
+        unknown_call["item"]["name"] = (
+            "mcp__blog_writer_bridge__unexpected_bridge_tool"
+        )
+        self.assert_command_failed(
+            [
+                skill_event("parent-a"),
+                direct_catalog_event(),
+                direct_call_event(),
+                unknown_call,
+            ]
+        )
+
     def test_command_rejects_expected_call_owned_by_a_spawned_child(self):
         self.assert_command_rejected(
             [

@@ -26,9 +26,11 @@ exactly these four bridge tools: `read_source_file`, `write_article_draft`, `fin
 
 Apply this decision order before any bridge call:
 
-1. If any cross-role bridge tool is visible — `discover_projects`,
-   `collect_activity`, `write_topic_draft`, `finalize_topics`, or
-   `write_conventions` — stop and report the unexpected tool surface.
+1. If any visible `blog_writer_bridge` tool falls outside the exact four-tool
+   allowlist, stop and report the unexpected tool surface. This includes every
+   cross-role bridge tool — `discover_projects`, `collect_activity`,
+   `write_topic_draft`, `finalize_topics`, or `write_conventions` — and any
+   unknown bridge tool.
 2. If only some of the four writer tools are visible, treat it as a partial matching surface, stop, and report the missing tools.
 3. Only with all four writer tools and no cross-role tools, call the named
    operations directly from the main session.

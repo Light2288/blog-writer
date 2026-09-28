@@ -161,6 +161,9 @@ for skill in "$TOPIC_SKILL" "$WRITER_SKILL"; do
     "$skill stops on a partial bridge surface"
   assert_contains "$skill" "cross-role bridge tool" \
     "$skill stops on cross-role bridge exposure"
+  assert_contains "$skill" \
+    'falls outside the exact four-tool' \
+    "$skill stops on every bridge tool outside its exact allowlist"
   assert_contains "$skill" "Never use shell or general filesystem tools" \
     "$skill forbids mutation bypasses"
 done
