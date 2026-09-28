@@ -141,7 +141,8 @@ assert_contains "$EXTRACT_SKILL" "time_updated" "extract-topics filters on time_
 bad_sqlite="$(grep -rInE 'sqlite3[[:space:]]' \
   --include='*.md' --include='*.sh' --include='*.py' --include='*.json' . 2>/dev/null \
   | grep -v -- '-readonly' \
-  | grep -v 'tests/acceptance_check.sh' || true)"
+  | grep -v 'tests/acceptance_check.sh' \
+  | grep -v 'tests/codex_acceptance_check.sh' || true)"
 if [ -z "$bad_sqlite" ]; then
   pass "every sqlite3 invocation in tracked files uses -readonly"
 else

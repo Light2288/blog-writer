@@ -42,6 +42,85 @@ assert_absent() {
   fi
 }
 
+# scan_forbidden_ingestion <path>...
+# Reject implementation-shaped local SQLite and ChatGPT-history ingestion while
+# allowing negative/out-of-scope prose in skills and agent instructions.
+scan_forbidden_ingestion() {
+  python3 - "$@" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+NEGATED = re.compile(r"\b(?:do not|don't|never|out of scope|unsupported|without)\b", re.I)
+PATTERNS = (
+    (
+        "SQLite module or CLI",
+        re.compile(
+            r"(?:\bnode:sqlite\b|\bbetter-sqlite3\b|"
+            r"['\"]sqlite3['\"]|"
+            r"\b(?:require|from|import)\s*\(?\s*['\"]sqlite3['\"]|"
+            r"(?<![-\w])sqlite3\s+(?:-|['\"$~/]))",
+            re.I,
+        ),
+    ),
+    (
+        "internal Codex SQLite path",
+        re.compile(
+            r"(?:~|\$HOME|/)[^\s'\"`]*\.codex[^\s'\"`]*"
+            r"\.(?:db|sqlite|sqlite3)\b",
+            re.I,
+        ),
+    ),
+    (
+        "SQLite filename literal",
+        re.compile(r"['\"][^'\"]*\.(?:db|sqlite|sqlite3)['\"]", re.I),
+    ),
+    (
+        "ChatGPT history endpoint",
+        re.compile(r"https?://(?:chat\.openai\.com|chatgpt\.com)/(?:backend-api|api)/", re.I),
+    ),
+    (
+        "ChatGPT history connector symbol",
+        re.compile(
+            r"\bchatgpt[_-](?:web[_-])?(?:history|conversations?)"
+            r"(?:[_-](?:client|connector|reader|ingest|fetch|import))?\b",
+            re.I,
+        ),
+    ),
+    (
+        "ChatGPT local-history path",
+        re.compile(r"(?:~|\$HOME|/)[^\s'\"`]*\.chatgpt(?:/|\b)", re.I),
+    ),
+    (
+        "actionable ChatGPT history ingestion",
+        re.compile(
+            r"\b(?:read|scan|ingest|import|fetch|collect|query|download)\b"
+            r".{0,100}\bchatgpt\s+(?:web\s+)?(?:history|conversations?)\b",
+            re.I,
+        ),
+    ),
+)
+
+violations = []
+for raw_root in sys.argv[1:]:
+    root = Path(raw_root)
+    files = [root] if root.is_file() else sorted(path for path in root.rglob("*") if path.is_file())
+    for path in files:
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (UnicodeDecodeError, OSError):
+            continue
+        for number, line in enumerate(lines, 1):
+            for label, pattern in PATTERNS:
+                if pattern.search(line) and not NEGATED.search(line):
+                    violations.append(f"{path}:{number}: {label}")
+
+if violations:
+    print("\n".join(violations))
+    raise SystemExit(1)
+PY
+}
+
 echo "== AC-01: OpenCode remains intact =="
 for path in \
   .opencode/opencode.json \
@@ -118,12 +197,39 @@ assert_contains codex-bridge/test/activity.test.mjs 'async function codexHome(t)
 assert_contains codex-bridge/test/git.test.mjs 'without_mutation' \
   "Git collection tests assert read-only behavior"
 
-if ! grep -rEi '(\.codex/[^[:space:]]*(sqlite|\.db)|codex[^[:space:]]*\.(sqlite|db))' \
-  .agents/skills >/dev/null 2>&1; then
-  pass "Codex skills contain no internal Codex SQLite/database path"
+if scan_forbidden_ingestion .agents/skills .codex codex-bridge/src; then
+  pass "Codex surfaces contain no forbidden SQLite or ChatGPT-history ingestion"
 else
-  fail "Codex skills reference an internal Codex SQLite/database path"
+  fail "Codex surfaces contain forbidden SQLite or ChatGPT-history ingestion"
 fi
+
+INGESTION_FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/codex-ingestion-guard.XXXXXX")"
+printf '%s\n' \
+  'ChatGPT web history is out of scope.' \
+  'Do not invoke sqlite3 or read an internal Codex database.' \
+  > "$INGESTION_FIXTURE/allowed.md"
+if scan_forbidden_ingestion "$INGESTION_FIXTURE/allowed.md"; then
+  pass "forbidden-ingestion guard permits negative/out-of-scope documentation"
+else
+  fail "forbidden-ingestion guard rejects negative/out-of-scope documentation"
+fi
+printf '%s\n' \
+  "import Database from 'better-sqlite3';" \
+  'const source = "https://chatgpt.com/backend-api/conversations";' \
+  > "$INGESTION_FIXTURE/forbidden.mjs"
+if scan_forbidden_ingestion "$INGESTION_FIXTURE/forbidden.mjs" >/dev/null 2>&1; then
+  fail "forbidden-ingestion guard missed synthetic SQLite/ChatGPT connectors"
+else
+  pass "forbidden-ingestion guard rejects synthetic SQLite/ChatGPT connectors"
+fi
+printf '%s\n' "const executable = 'sqlite3';" \
+  > "$INGESTION_FIXTURE/sqlite-cli.mjs"
+if scan_forbidden_ingestion "$INGESTION_FIXTURE/sqlite-cli.mjs" >/dev/null 2>&1; then
+  fail "forbidden-ingestion guard missed a quoted sqlite3 executable"
+else
+  pass "forbidden-ingestion guard rejects a quoted sqlite3 executable"
+fi
+rm -r -- "$INGESTION_FIXTURE"
 
 echo "== AC-09 through AC-14: shared formats and scoped operations =="
 assert_contains .opencode/skills/extract-topics/SKILL.md 'inputs/topics-YYYY-MM-DD.md' \
@@ -182,13 +288,36 @@ assert_contains tests/run_all.sh 'tests/codex_acceptance_check.sh' \
   "default suite includes Codex acceptance checks"
 assert_absent tests/run_all.sh 'tests/codex_live_check.sh' \
   "default suite excludes live Codex checks"
-assert_file tests/codex_live_check.sh
-assert_contains tests/codex_live_check.sh 'CODEX_ACCEPTANCE_RUNTIME' \
+LIVE_CHECK=tests/codex_live_check.sh
+assert_file "$LIVE_CHECK"
+assert_contains "$LIVE_CHECK" 'CODEX_ACCEPTANCE_RUNTIME' \
   "live Codex checks are explicitly gated"
-assert_contains tests/codex_live_check.sh 'mktemp -d' \
+assert_contains "$LIVE_CHECK" 'mktemp -d' \
   "live Codex checks create an isolated fixture project"
-assert_contains tests/codex_live_check.sh 'CODEX_HOME' \
+assert_contains "$LIVE_CHECK" 'CODEX_HOME' \
   "live Codex checks isolate Codex history"
+assert_contains "$LIVE_CHECK" 'verify_agent_events' \
+  "live Codex checks validate structured agent events"
+assert_contains "$LIVE_CHECK" 'mcp_tool_call' \
+  "live Codex checks require structured MCP tool-call evidence"
+assert_contains "$LIVE_CHECK" 'cross_role_tool' \
+  "live Codex checks require structured cross-role isolation evidence"
+for cross_probe in \
+  'Cross-role convention probe' \
+  'cross-role-article' \
+  '2099-01-04'; do
+  assert_contains "$LIVE_CHECK" "$cross_probe" \
+    "live Codex cross-role probe uses valid arguments: $cross_probe"
+done
+for contract in \
+  'topic-extractor:write_topic_draft' \
+  'conventions-writer:write_conventions' \
+  'blog-writer:write_article_draft'; do
+  assert_contains "$LIVE_CHECK" "$contract" \
+    "live Codex checks exercise custom-agent contract $contract"
+done
+assert_absent "$LIVE_CHECK" 'grep -qF -- "$name" "$DISCOVERY_OUTPUT"' \
+  "live Codex discovery never treats assistant prose as evidence"
 
 echo "== AC-18: dual-runtime setup and privacy documentation =="
 for doc in README.md docs/acceptance.md; do
