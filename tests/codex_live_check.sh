@@ -115,15 +115,6 @@ def structured_agent(value):
         return any(structured_agent(child) for child in value)
     return False
 
-def values_for_keys(value, keys):
-    values = set()
-    for node in objects(value):
-        for key in keys:
-            candidate = node.get(key)
-            if isinstance(candidate, (str, int)) and str(candidate):
-                values.add(str(candidate))
-    return values
-
 def direct_values_for_keys(value, keys):
     if not isinstance(value, dict):
         return set()
@@ -133,38 +124,67 @@ def direct_values_for_keys(value, keys):
         if isinstance(value.get(key), (str, int)) and str(value[key])
     }
 
-def child_ids(value):
-    return values_for_keys(
-        value,
-        {
-            "child_agent_id",
-            "child_thread_id",
-            "receiver_thread_id",
-            "spawned_agent_id",
-            "spawned_thread_id",
-            "target_agent_id",
-            "agent_thread_id",
-            "target_thread_id",
-        },
-    )
+OWNER_ID_PRECEDENCE = (
+    (
+        "child_agent_id",
+        "child_thread_id",
+        "receiver_thread_id",
+        "spawned_agent_id",
+        "spawned_thread_id",
+        "target_agent_id",
+        "target_thread_id",
+    ),
+    ("agent_thread_id",),
+    ("thread_id",),
+    ("agent_id",),
+    ("conversation_id",),
+)
 
-def direct_association_ids(value):
-    return direct_values_for_keys(
-        value,
-        {
-            "agent_id",
-            "agent_thread_id",
-            "child_agent_id",
-            "child_thread_id",
-            "conversation_id",
-            "receiver_thread_id",
-            "spawned_agent_id",
-            "spawned_thread_id",
-            "target_agent_id",
-            "target_thread_id",
-            "thread_id",
-        },
-    )
+def direct_owner(value):
+    if not isinstance(value, dict):
+        return None, "missing"
+    for keys in OWNER_ID_PRECEDENCE:
+        values = direct_values_for_keys(value, keys)
+        if len(values) == 1:
+            return next(iter(values)), "present"
+        if len(values) > 1:
+            return None, "ambiguous"
+    return None, "missing"
+
+def normalized_records(envelope):
+    has_item = "item" in envelope
+    has_items = "items" in envelope
+    if has_item and has_items:
+        return
+    if has_item:
+        if not isinstance(envelope["item"], dict):
+            return
+        nested = [envelope["item"]]
+    elif has_items:
+        if (
+            not isinstance(envelope["items"], list)
+            or len(envelope["items"]) != 1
+            or not isinstance(envelope["items"][0], dict)
+        ):
+            return
+        nested = envelope["items"]
+    else:
+        nested = [envelope]
+
+    envelope_owner, _ = direct_owner(envelope)
+    for node in nested:
+        node_owner, node_owner_state = direct_owner(node)
+        # A nested event owns its evidence. The envelope ID is only a fallback
+        # when the nested schema has no direct owner field at all.
+        if node is envelope or node_owner_state != "missing":
+            owner = node_owner
+        else:
+            owner = envelope_owner
+        yield {
+            "node": node,
+            "owner": owner,
+            "event_type": envelope.get("type"),
+        }
 
 def descriptor(node):
     return " ".join(
@@ -273,24 +293,22 @@ def surface_names(node):
     return names
 
 def server_names(value):
-    names = values_for_keys(value, {"server", "server_name", "mcp_server"})
-    for node in objects(value):
-        for key in ("tool", "tool_name", "name"):
-            candidate = node.get(key)
-            if isinstance(candidate, str) and "__" in candidate:
-                names.add(candidate.rsplit("__", 1)[0])
+    names = direct_values_for_keys(value, {"server", "server_name", "mcp_server"})
+    for key in ("tool", "tool_name", "name"):
+        candidate = value.get(key)
+        if isinstance(candidate, str) and "__" in candidate:
+            names.add(candidate.rsplit("__", 1)[0])
     return names
 
 def profile_names(value):
-    profiles = values_for_keys(value, {"profile", "profile_name", "mcp_profile"})
-    for node in objects(value):
-        for key in ("args", "arguments", "command_args"):
-            args = node.get(key)
-            if not isinstance(args, list):
-                continue
-            for index, arg in enumerate(args[:-1]):
-                if arg == "--profile" and isinstance(args[index + 1], str):
-                    profiles.add(args[index + 1])
+    profiles = direct_values_for_keys(value, {"profile", "profile_name", "mcp_profile"})
+    for key in ("args", "arguments", "command_args"):
+        args = value.get(key)
+        if not isinstance(args, list):
+            continue
+        for index, arg in enumerate(args[:-1]):
+            if arg == "--profile" and isinstance(args[index + 1], str):
+                profiles.add(args[index + 1])
     return profiles
 
 def expected_server(names):
@@ -306,16 +324,17 @@ tool_events = []
 surface_events = []
 metadata_events = []
 for event in events:
-    for node in objects(event):
+    for record in normalized_records(event):
+        node = record["node"]
+        owner = record["owner"]
         desc = descriptor(node)
         if (
             ("spawn_agent" in desc or "spawn" in desc or "collab" in desc or "custom_agent" in desc)
             and structured_agent(node)
         ):
-            spawn_records.append({"ids": child_ids(node), "node": node})
-        ids = direct_association_ids(event) | direct_association_ids(node)
-        servers = server_names(event) | server_names(node)
-        profiles = profile_names(event) | profile_names(node)
+            spawn_records.append({"owner": owner, "node": node})
+        servers = server_names(node)
+        profiles = profile_names(node)
         name = tool_name(node)
         if name and (
             "mcp_tool_call" in desc
@@ -326,33 +345,36 @@ for event in events:
                 {
                     "name": name,
                     "node": node,
-                    "event_type": event.get("type"),
-                    "ids": ids,
+                    "event_type": record["event_type"],
+                    "owner": owner,
                 }
             )
         surface = surface_names(node)
         if surface and expected_server(servers):
-            surface_events.append({"surface": surface, "node": node, "ids": ids})
+            surface_events.append({"surface": surface, "node": node, "owner": owner})
         if servers or profiles:
             metadata_events.append(
-                {"servers": servers, "profiles": profiles, "ids": ids}
+                {"servers": servers, "profiles": profiles, "owner": owner}
             )
 
-spawn_agent_ids = set().union(*(record["ids"] for record in spawn_records), set())
-mcp_agent_ids = set().union(
-    *(record["ids"] for record in tool_events + surface_events),
-    set(),
-)
+spawn_agent_ids = {
+    record["owner"] for record in spawn_records if record["owner"] is not None
+}
+mcp_agent_ids = {
+    record["owner"]
+    for record in tool_events + surface_events
+    if record["owner"] is not None
+}
 candidate_child_ids = sorted(spawn_agent_ids & mcp_agent_ids)
 candidate_results = {}
 unsafe_cross_role_calls = []
 for child_id in candidate_child_ids:
-    child_tools = [record for record in tool_events if child_id in record["ids"]]
+    child_tools = [record for record in tool_events if child_id == record["owner"]]
     child_surfaces = [
-        record for record in surface_events if child_id in record["ids"]
+        record for record in surface_events if child_id == record["owner"]
     ]
     child_metadata = [
-        record for record in metadata_events if child_id in record["ids"]
+        record for record in metadata_events if child_id == record["owner"]
     ]
 
     unexpected_success = sorted(
@@ -367,18 +389,24 @@ for child_id in candidate_child_ids:
     if unexpected_success:
         unsafe_cross_role_calls.append((child_id, unexpected_success))
 
-    surface = set().union(
-        *(record["surface"] for record in child_surfaces),
-        set(),
-    )
-    exact_surface = bool(child_surfaces) and surface == profile_tools[expected_agent]
-    unknown_surface_tools = surface - all_tools
+    # Catalogs are indivisible observations: two partial advertisements cannot
+    # be combined into an exact role surface.
+    exact_surface = False
+    for record in child_surfaces:
+        surface = record["surface"]
+        if surface == profile_tools[expected_agent]:
+            exact_surface = True
+            break
+    unknown_surface_tools = {
+        name
+        for record in child_surfaces
+        for name in record["surface"] - all_tools
+    }
     observed_allowed_tools = {
         record["name"]
         for record in child_tools
         if record["name"] in profile_tools[expected_agent]
     }
-    observed_allowed_tools.update(surface & profile_tools[expected_agent])
     rejected_cross_role_tools = {
         record["name"]
         for record in child_tools

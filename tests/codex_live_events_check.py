@@ -146,6 +146,39 @@ class LiveEventVerifierTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("NEEDS_CONTEXT", result.stderr)
 
+    def test_rejects_nested_evidence_with_a_conflicting_envelope_child(self):
+        nested_call = call_event("child-b")["item"]
+        nested_call["thread_id"] = "child-b"
+        result = self.run_verifier(
+            [
+                skill_event(),
+                spawn_event("child-a"),
+                catalog_event("child-a"),
+                {
+                    "type": "item.completed",
+                    "thread_id": "child-a",
+                    "item": nested_call,
+                },
+            ]
+        )
+
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("NEEDS_CONTEXT", result.stderr)
+
+    def test_rejects_two_partial_catalogs_whose_union_is_complete(self):
+        result = self.run_verifier(
+            [
+                skill_event(),
+                spawn_event("child-a"),
+                catalog_event("child-a", EXPECTED_TOOLS[:2]),
+                catalog_event("child-a", EXPECTED_TOOLS[2:]),
+                call_event("child-a"),
+            ]
+        )
+
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("NEEDS_CONTEXT", result.stderr)
+
     def test_rejects_unknown_bare_or_prefixed_catalog_tools(self):
         for extra_tool in (
             "unexpected_bridge_tool",
