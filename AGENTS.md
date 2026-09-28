@@ -1,58 +1,74 @@
 # AGENTS.md — Blog-Writer Project Context
 
-This file is read by opencode as top-level project context. It tells any
-agent working in this repository what the project is and the invariants it
-must respect.
+Blog-Writer turns recent work across other projects into reviewed bilingual
+blog articles. It observes source projects and local runtime history but never
+modifies those sources. This repository contains the workflows, conventions,
+candidate topics, drafts, and publication staging files.
 
-## What this project is
+Articles target a Tailwind/Next.js MDX blog in English and Italian. Both the
+OpenCode and Codex runtimes are invoked manually; there is no automation or
+scheduled run.
 
-Blog-Writer is a self-contained opencode project that helps the user turn
-recent work — scattered across multiple other projects — into blog articles.
-It **only ever observes** the projects it writes about; it never modifies
-them. This repository houses the tools, conventions, and drafts, and is
-separate from the source projects.
+## Shared workflow invariants
 
-Articles are published to a Tailwind/Next.js MDX blog that is bilingual
-(English + Italian), so drafts must match that blog's exact MDX file format.
+- **DRAFT-first.** Persist `Status: DRAFT` for topics or `draft: true` for an
+  article before asking a short review question. Finalize only after explicit
+  approval. Never embed a file body or large markdown in a question.
+- **Real conventions required.** `CONVENTIONS.md` is invalid when missing or
+  placeholder-only. Refuse to draft until it contains real guidance; a single
+  placeholder is not sufficient.
+- **Source projects are read-only.** Fact-check and activity collection may
+  observe confirmed source projects but never edit, commit, or push them.
+- **Stable shared formats.** Both runtimes use `inputs/topics-YYYY-MM-DD.md`,
+  `inputs/published-topics.md`, `drafts/*.mdx`, `published/*.mdx`, stable topic
+  keys, English-first authoring, and the same bilingual frontmatter.
+- **Fixed MDX vocabulary.** Use only the components documented in
+  `CONVENTIONS.md`; never invent a component.
+- **Explicit publication.** Final approval does not publish. Move a finalized
+  article and update its ledger only on an explicit publish command.
 
-There is no automation and no scheduled runs. Both agents are invoked
-manually from inside this project when the user wants.
+## OpenCode runtime
 
-## The two agents
+OpenCode loads project configuration from `.opencode/`:
 
-- **topic-extractor** (read-only analyst): analyses recent activity across a
-  set of tracked projects — git commit history plus opencode session
-  transcripts from `~/.local/share/opencode/opencode.db` (queried with
-  `sqlite3 -readonly`) — correlates them by timestamp, redacts obvious
-  secrets, and writes a DRAFT candidate-topics file to
-  `inputs/topics-YYYY-MM-DD.md`. It **never writes an article**, even if asked.
+- **topic-extractor** reads Git history plus OpenCode sessions from
+  `~/.local/share/opencode/opencode.db` using `sqlite3 -readonly`, redacts
+  obvious secrets, and writes only `inputs/**`. Its queries bound the window
+  with `session.time_updated`; that column is **not indexed** in the verified
+  schema, so the read-only query may scan the small session table.
+- **blog-writer** reads conventions every run, authors English before Italian,
+  writes only `drafts/**`, `inputs/**`, and `published/**`, and never commits or
+  pushes.
+- The supporting OpenCode skills live under `.opencode/skills/`; OpenCode's
+  scoped permissions and command denials remain defined in
+  `.opencode/opencode.json`.
 
-- **blog-writer** (the writer): reads `CONVENTIONS.md` every run (and refuses
-  to draft without at least a placeholder), takes a topic from the current
-  `inputs/topics-*.md` file or free text, drafts the **English body first**
-  and iterates, then translates to Italian and assembles a single bilingual
-  `.mdx` file in `drafts/` with frontmatter `draft: true`. On the user's
-  explicit command it flips `draft: false` and moves the file to
-  `published/`. It **never edits source projects** and **never commits or
-  pushes**.
+Do not change OpenCode behavior when working on the Codex path.
 
-## Invariants (both agents)
+## Codex runtime
 
-- **DRAFT-first.** Write the file to disk in its draft state
-  (`Status: DRAFT` for topics; frontmatter `draft: true` for articles), then
-  ask a short summarising `question`. Flip to final only on explicit user
-  approval. **Never embed large markdown inside a `question` call** — it can
-  terminate the request.
-- **Scoped writes.** The runtime enforces write scopes:
-  - `topic-extractor` may write only within `inputs/**`.
-  - `blog-writer` may write only within `drafts/**`, `inputs/**`,
-    `published/**`.
-- **Read-only DB access.** All `sqlite3` calls use `-readonly` and filter on
-  the indexed `time_updated` column.
-- **No destructive or remote git.** `git push`, `git commit --amend`, and
-  `rm -rf` are denied for both agents.
-- **Fixed MDX vocabulary.** The writer stays within the target blog's allowed
-  component set and never invents components outside it.
+Codex loads three repository skills from `.agents/skills/`:
 
-See `README.md` for how to run the project and `CONVENTIONS.md` for the
-writing style (authored in step 03).
+- `extract-topics` coordinates topic discovery, project confirmation,
+  synthesis, DRAFT review, and final approval; it delegates only bounded
+  history and topic operations to the `topic-extractor` custom agent.
+- `author-conventions` conducts the focused interview and final review in the
+  main chat; it delegates only persistence to `conventions-writer`.
+- `write-blog-article` owns topic resolution, English-first writing,
+  translation, and every approval gate in the main chat; it delegates only
+  bounded fact checks and article mutations to `blog-writer`.
+
+The main Codex session and all three custom agents run with a read-only
+sandbox. `.codex/config.toml` enables multi-agent behavior but intentionally
+registers no privileged MCP bridge. Each standalone file under
+`.codex/agents/` registers exactly one `node codex-bridge/src/server.mjs
+--profile <role>` server and may use only that matching profile. Custom agents
+never question the user; they return concise structured results to the main
+chat.
+
+All intended Codex writes pass through narrow bridge operations. Never add a
+general shell, arbitrary file tool, caller-supplied project root, or cross-role
+profile access.
+
+See `README.md` for runtime invocation and verification, and
+`CONVENTIONS.md` for the actual writing style.

@@ -1,0 +1,8 @@
+sandbox_mode = "read-only"
+
+[features]
+multi_agent = true
+
+[agents]
+max_threads = 3
+max_depth = 1

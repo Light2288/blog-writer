@@ -90,3 +90,25 @@ test('createServer_does_not_register_arbitrary_shell_or_file_tools', () => {
     assert.equal(advertisedNames.includes('read_file'), false);
   }
 });
+
+test('createServer_constructs_completed_real_handlers_without_injection', () => {
+  for (const [profile, expectedNames] of Object.entries(
+    EXPECTED_PROFILE_TOOL_NAMES,
+  )) {
+    const server = createServer({
+      profile,
+      projectRoot: '/test/blog-writer',
+      dependencies: { McpServerClass: FakeServer },
+    });
+
+    assert.deepEqual(
+      server.registrations.map(({ name }) => name),
+      expectedNames,
+    );
+    for (const registration of server.registrations) {
+      assert.equal(typeof registration.handler, 'function');
+      assert.equal(typeof registration.config.description, 'string');
+      assert.notEqual(registration.config.description.length, 0);
+    }
+  }
+});

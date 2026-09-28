@@ -2,6 +2,9 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 import { PROFILE_TOOL_NAMES, parseProfile } from './profiles.mjs';
+import { createConventionsHandlers } from './tools/conventions.mjs';
+import { createTopicHandlers } from './tools/topic.mjs';
+import { createWriterHandlers } from './tools/writer.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -30,11 +33,25 @@ export function registerProfileTools(server, profile, handlers) {
   }
 }
 
+function createProfileHandlers(profile, projectRoot) {
+  switch (profile) {
+    case 'topic':
+      return createTopicHandlers({ projectRoot });
+    case 'conventions':
+      return createConventionsHandlers({ projectRoot });
+    case 'writer':
+      return createWriterHandlers({ projectRoot });
+    default:
+      throw new Error(`Unknown bridge profile: ${profile}`);
+  }
+}
+
 export function createServer({ profile, projectRoot, dependencies }) {
   const resolvedDependencies = dependencies ?? {};
   const McpServerClass =
     resolvedDependencies.McpServerClass ?? loadSdk().McpServer;
-  const handlers = resolvedDependencies.handlers ?? {};
+  const handlers =
+    resolvedDependencies.handlers ?? createProfileHandlers(profile, projectRoot);
   const server = new McpServerClass({
     name: 'blog-writer-codex-bridge',
     version: '1.0.0',
