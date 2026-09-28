@@ -670,7 +670,7 @@ def call_name(node):
         return None
     for key in ("name", "tool", "tool_name"):
         name = normalize_tool(node.get(key))
-        if name in all_tools:
+        if name and (name in all_tools or is_bridge_server(servers(node))):
             return name
     return None
 
@@ -694,11 +694,12 @@ def successful_result(node, event_type):
         return False
     return node.get("error") in (None, False, "")
 
-skill_seen = any(
-    node.get("skill_name") == expected_skill
+skill_owners = [
+    owner(event, node)
     for event in events
     for node in objects(event)
-)
+    if node.get("skill_name") == expected_skill
+]
 spawned = set().union(*(child_ids(event) for event in events)) if events else set()
 catalogs = []
 calls = []
@@ -737,6 +738,8 @@ candidate_owners = sorted(
 )
 valid = []
 for candidate in candidate_owners:
+    if skill_owners.count(candidate) != 1:
+        continue
     exact_catalogs = [
         advertised
         for record_owner, advertised, _ in catalogs
@@ -756,8 +759,10 @@ for candidate in candidate_owners:
         valid.append(candidate)
 
 missing = []
-if not skill_seen:
+if not skill_owners:
     missing.append(f"skill identity {expected_skill}")
+elif not any(candidate in skill_owners for candidate in candidate_owners):
+    missing.append(f"skill identity {expected_skill} on the same parent session")
 if not candidate_owners:
     missing.append(f"exact {expected_profile} profile catalog on the parent session")
 if not valid:

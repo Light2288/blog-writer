@@ -198,6 +198,16 @@ else
   fail "adversarial window invocation exits zero"
 fi
 
+ALIAS_DIR="$SCRATCH/external-alias"
+mkdir -p "$ALIAS_DIR"
+ln -s "$LAUNCHER" "$ALIAS_DIR/blog-writer-codex"
+reset_capture
+if PATH="$FAKE_BIN:$PATH" CAPTURE_DIR="$CAPTURE" /bin/bash "$ALIAS_DIR/blog-writer-codex" topics; then
+  validate_capture topics "seven-day default" && pass "external launcher symlink resolves the canonical repository root" || fail "external launcher symlink used the wrong repository root"
+else
+  fail "external launcher symlink starts the workflow"
+fi
+
 reset_capture
 PATH="$FAKE_BIN:$PATH" CAPTURE_DIR="$CAPTURE" FAKE_CODEX_EXIT=23 /bin/bash "$LAUNCHER" topics >/dev/null 2>&1
 status=$?

@@ -16,6 +16,22 @@ error() {
 }
 
 script_path="${BASH_SOURCE[0]}"
+while [ -L "$script_path" ]; do
+  case "$script_path" in
+    */*) link_dir="${script_path%/*}" ;;
+    *) link_dir="." ;;
+  esac
+  if ! link_dir="$(cd "$link_dir" 2>/dev/null && pwd -P)"; then
+    error "could not resolve the launcher symlink directory"
+  fi
+  if ! link_target="$(readlink "$script_path")"; then
+    error "could not resolve the launcher symlink"
+  fi
+  case "$link_target" in
+    /*) script_path="$link_target" ;;
+    *) script_path="$link_dir/$link_target" ;;
+  esac
+done
 case "$script_path" in
   */*) script_dir="${script_path%/*}" ;;
   *) script_dir="." ;;

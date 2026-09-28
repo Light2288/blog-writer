@@ -24,11 +24,14 @@ EXPECTED_ARGUMENTS = {
 }
 
 
-def skill_event():
-    return {
+def skill_event(owner=None):
+    event = {
         "type": "skill.invoked",
         "item": {"skill_name": "extract-topics"},
     }
+    if owner is not None:
+        event["thread_id"] = owner
+    return event
 
 
 def spawn_event(child_id):
@@ -161,9 +164,14 @@ class LiveEventVerifierTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn("NEEDS_CONTEXT", result.stderr)
 
+    def assert_command_failed(self, events):
+        result = self.run_command_verifier(events)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("FAIL:", result.stderr)
+
     def test_command_accepts_correlated_parent_catalog_call_and_result(self):
         result = self.run_command_verifier(
-            [skill_event(), direct_catalog_event(), direct_call_event()]
+            [skill_event("parent-a"), direct_catalog_event(), direct_call_event()]
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -189,25 +197,41 @@ class LiveEventVerifierTests(unittest.TestCase):
     def test_command_rejects_wrong_call_arguments(self):
         wrong = {**EXPECTED_ARGUMENTS, "overwrite": True}
         self.assert_command_rejected(
-            [skill_event(), direct_catalog_event(), direct_call_event(arguments=wrong)]
+            [skill_event("parent-a"), direct_catalog_event(), direct_call_event(arguments=wrong)]
         )
 
     def test_command_rejects_missing_completed_result_evidence(self):
         call = direct_call_event()
         del call["item"]["result"]
-        self.assert_command_rejected([skill_event(), direct_catalog_event(), call])
+        self.assert_command_rejected([skill_event("parent-a"), direct_catalog_event(), call])
 
     def test_command_rejects_partial_or_cross_role_catalogs(self):
-        for tools in (EXPECTED_TOOLS[:2], EXPECTED_TOOLS + ["write_article_draft"]):
+        for tools in (
+            EXPECTED_TOOLS[:2],
+            EXPECTED_TOOLS + ["write_article_draft"],
+            EXPECTED_TOOLS + ["unexpected_bridge_tool"],
+        ):
             with self.subTest(tools=tools):
                 self.assert_command_rejected(
-                    [skill_event(), direct_catalog_event(tools=tools), direct_call_event()]
+                    [skill_event("parent-a"), direct_catalog_event(tools=tools), direct_call_event()]
                 )
+
+    def test_command_fails_on_a_successful_unknown_bridge_call(self):
+        unknown_call = direct_call_event()
+        unknown_call["item"]["name"] = "unexpected_bridge_tool"
+        self.assert_command_failed(
+            [
+                skill_event("parent-a"),
+                direct_catalog_event(),
+                direct_call_event(),
+                unknown_call,
+            ]
+        )
 
     def test_command_rejects_expected_call_owned_by_a_spawned_child(self):
         self.assert_command_rejected(
             [
-                skill_event(),
+                skill_event("parent-a"),
                 spawn_event("child-a"),
                 direct_catalog_event(owner="child-a"),
                 direct_call_event(owner="child-a"),
@@ -217,9 +241,18 @@ class LiveEventVerifierTests(unittest.TestCase):
     def test_command_rejects_catalog_and_call_split_across_sessions(self):
         self.assert_command_rejected(
             [
-                skill_event(),
+                skill_event("parent-a"),
                 direct_catalog_event(owner="parent-a"),
                 direct_call_event(owner="parent-b"),
+            ]
+        )
+
+    def test_command_rejects_skill_identity_from_an_unrelated_owner(self):
+        self.assert_command_rejected(
+            [
+                skill_event("parent-b"),
+                direct_catalog_event(owner="parent-a"),
+                direct_call_event(owner="parent-a"),
             ]
         )
 
