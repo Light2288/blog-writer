@@ -51,14 +51,13 @@ from pathlib import Path
 import re
 import sys
 
-NEGATED = re.compile(r"\b(?:do not|don't|never|out of scope|unsupported|without)\b", re.I)
 PATTERNS = (
     (
         "SQLite module or CLI",
         re.compile(
-            r"(?:\bnode:sqlite\b|\bbetter-sqlite3\b|"
+            r"(?:\b(?:from|import)\s*\(?\s*['\"](?:node:sqlite|better-sqlite3|sqlite3)['\"]|"
+            r"\brequire\s*\(\s*['\"](?:node:sqlite|better-sqlite3|sqlite3)['\"]\s*\)|"
             r"['\"]sqlite3['\"]|"
-            r"\b(?:require|from|import)\s*\(?\s*['\"]sqlite3['\"]|"
             r"(?<![-\w])sqlite3\s+(?:-|['\"$~/]))",
             re.I,
         ),
@@ -83,21 +82,14 @@ PATTERNS = (
         "ChatGPT history connector symbol",
         re.compile(
             r"\bchatgpt[_-](?:web[_-])?(?:history|conversations?)"
-            r"(?:[_-](?:client|connector|reader|ingest|fetch|import))?\b",
+            r"[_-](?:client|connector|reader|ingest(?:er|ion)?|fetch(?:er)?|import(?:er)?)\b|"
+            r"\b(?:fetch|read|load|import|get)ChatGPT(?:Web)?(?:History|Conversations?)\b",
             re.I,
         ),
     ),
     (
         "ChatGPT local-history path",
         re.compile(r"(?:~|\$HOME|/)[^\s'\"`]*\.chatgpt(?:/|\b)", re.I),
-    ),
-    (
-        "actionable ChatGPT history ingestion",
-        re.compile(
-            r"\b(?:read|scan|ingest|import|fetch|collect|query|download)\b"
-            r".{0,100}\bchatgpt\s+(?:web\s+)?(?:history|conversations?)\b",
-            re.I,
-        ),
     ),
 )
 
@@ -112,7 +104,7 @@ for raw_root in sys.argv[1:]:
             continue
         for number, line in enumerate(lines, 1):
             for label, pattern in PATTERNS:
-                if pattern.search(line) and not NEGATED.search(line):
+                if pattern.search(line):
                     violations.append(f"{path}:{number}: {label}")
 
 if violations:
@@ -205,8 +197,7 @@ fi
 
 INGESTION_FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/codex-ingestion-guard.XXXXXX")"
 printf '%s\n' \
-  'ChatGPT web history is out of scope.' \
-  'Do not invoke sqlite3 or read an internal Codex database.' \
+  'Internal Codex SQLite and ChatGPT web history are unsupported.' \
   > "$INGESTION_FIXTURE/allowed.md"
 if scan_forbidden_ingestion "$INGESTION_FIXTURE/allowed.md"; then
   pass "forbidden-ingestion guard permits negative/out-of-scope documentation"
@@ -214,8 +205,8 @@ else
   fail "forbidden-ingestion guard rejects negative/out-of-scope documentation"
 fi
 printf '%s\n' \
-  "import Database from 'better-sqlite3';" \
-  'const source = "https://chatgpt.com/backend-api/conversations";' \
+  "import Database from 'better-sqlite3'; // never log database contents" \
+  'const source = "https://chatgpt.com/backend-api/conversations"; // works without browser state' \
   > "$INGESTION_FIXTURE/forbidden.mjs"
 if scan_forbidden_ingestion "$INGESTION_FIXTURE/forbidden.mjs" >/dev/null 2>&1; then
   fail "forbidden-ingestion guard missed synthetic SQLite/ChatGPT connectors"
@@ -298,8 +289,14 @@ assert_contains "$LIVE_CHECK" 'CODEX_HOME' \
   "live Codex checks isolate Codex history"
 assert_contains "$LIVE_CHECK" 'verify_agent_events' \
   "live Codex checks validate structured agent events"
+assert_contains "$LIVE_CHECK" 'skill_name' \
+  "live Codex checks require structured repository-skill identity"
+assert_contains "$LIVE_CHECK" 'shared_agent_ids' \
+  "live Codex checks correlate agent and MCP evidence by structured identity"
 assert_contains "$LIVE_CHECK" 'mcp_tool_call' \
   "live Codex checks require structured MCP tool-call evidence"
+assert_contains "$LIVE_CHECK" 'surface == profile_tools' \
+  "live Codex checks require an exact per-role tool catalog"
 assert_contains "$LIVE_CHECK" 'cross_role_tool' \
   "live Codex checks require structured cross-role isolation evidence"
 for cross_probe in \
@@ -310,9 +307,9 @@ for cross_probe in \
     "live Codex cross-role probe uses valid arguments: $cross_probe"
 done
 for contract in \
-  'topic-extractor:write_topic_draft' \
-  'conventions-writer:write_conventions' \
-  'blog-writer:write_article_draft'; do
+  'extract-topics:topic-extractor:write_topic_draft' \
+  'author-conventions:conventions-writer:write_conventions' \
+  'write-blog-article:blog-writer:write_article_draft'; do
   assert_contains "$LIVE_CHECK" "$contract" \
     "live Codex checks exercise custom-agent contract $contract"
 done
