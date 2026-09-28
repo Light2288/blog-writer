@@ -562,7 +562,6 @@ profile_tools = {
 if expected_profile not in profile_tools or expected_tool not in profile_tools[expected_profile]:
     print("NEEDS_CONTEXT: unsupported expected command profile/tool", file=sys.stderr)
     raise SystemExit(2)
-all_tools = set().union(*profile_tools.values(), {"write_conventions"})
 expected_surface = profile_tools[expected_profile]
 
 events = []
@@ -670,17 +669,11 @@ def surface(node):
     return names
 
 def call_name(node):
-    desc = " ".join(str(node.get(key, "")).lower() for key in ("type", "kind"))
-    if "mcp" not in desc and not is_bridge_server(servers(node)):
-        return None
+    bridge_server = is_bridge_server(servers(node))
     for key in ("name", "tool", "tool_name"):
         raw_name = node.get(key)
         name = normalize_tool(raw_name)
-        if name and (
-            name in all_tools
-            or is_bridge_server(servers(node))
-            or is_bridge_qualified_tool(raw_name)
-        ):
+        if name and (bridge_server or is_bridge_qualified_tool(raw_name)):
             return name
     return None
 
