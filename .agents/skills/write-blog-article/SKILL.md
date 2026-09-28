@@ -47,9 +47,14 @@ not access SQLite, rollout files, arbitrary paths, or source files directly.
 Derive a canonical kebab-case slug from the working title: lowercase, replace
 runs of non-alphanumeric characters with `-`, collapse repeats, trim edges.
 Use `drafts/<slug>.mdx`. Carry a selected candidate's `topic_key`; otherwise use
-the same derivation as the slug. If the slug already exists in `drafts/` or
-`published/`, ask before overwriting and pass `overwrite: true` only after that
-explicit choice.
+the same derivation as the slug. If the slug already exists in `drafts/`, ask
+before overwriting and pass `overwrite: true` only after that explicit choice.
+
+If `published/<slug>.mdx` already exists, stop safely before drafting or
+finalizing. Published-slug replacement is unsupported. Ask the user to choose
+a new slug or handle replacement outside this workflow. Never tell the custom
+agent to bypass the bridge or imply that draft overwrite approval can replace a
+published article.
 
 ### 4. Draft the English body first
 
@@ -154,6 +159,7 @@ Allowed MDX vocabulary is limited to `<Lang value="en|it">`,
 `lang:filename` info-string convention, footnotes, `<video>` with `<source>`,
 markdown images or frontmatter images, and standard markdown. Never invent components outside this set.
 
-When editing a previously dated or published article, preserve `date` and
-refresh `lastmod` to the edit/publication date. A missing draft, invalid marker,
-or bridge failure is reported safely and leaves the workflow uncompleted.
+When editing a previously dated draft, preserve `date` and refresh `lastmod` to
+the edit date. Existing published articles cannot be edited or replaced by this
+workflow. A missing draft, invalid marker, or bridge failure is reported safely
+and leaves the workflow uncompleted.

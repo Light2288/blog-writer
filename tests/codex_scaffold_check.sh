@@ -142,6 +142,10 @@ assert_contains "$WRITER_SKILL" "read_source_file" \
   "article skill delegates bounded fact checks"
 assert_contains "$WRITER_SKILL" "publish_article" \
   "article skill delegates explicit publication"
+assert_contains "$WRITER_SKILL" "Published-slug replacement is unsupported" \
+  "article skill stops safely on published collisions"
+assert_absent "$WRITER_SKILL" "previously dated or published article" \
+  "article skill does not claim published-article editing"
 assert_contains "$WRITER_SKILL" "Never invent components outside this set" \
   "article skill preserves the controlled MDX vocabulary"
 
