@@ -4,6 +4,7 @@ import { z } from 'zod/v4';
 
 import { collectActivity } from '../activity.mjs';
 import { scanRollouts } from '../history.mjs';
+import { createTopicOperations } from '../topics.mjs';
 
 const boundsShape = {
   lo: z.number().int().nonnegative(),
@@ -37,6 +38,14 @@ export function createTopicHandlers(options = {}) {
   const collectActivityImpl = options.collectActivityImpl ?? collectActivity;
   const scanRolloutsImpl = options.scanRolloutsImpl ?? scanRollouts;
   const codexHome = options.codexHome;
+  let topicOperations = options.topicOperations;
+  function operations() {
+    topicOperations ??= createTopicOperations({
+      projectRoot: options.projectRoot,
+      atomicWriteImpl: options.atomicWriteImpl,
+    });
+    return topicOperations;
+  }
 
   return {
     discover_projects: {
@@ -98,6 +107,36 @@ export function createTopicHandlers(options = {}) {
           );
         } catch {
           return failure('Unable to collect activity from local history');
+        }
+      },
+    },
+    write_topic_draft: {
+      config: {
+        description: 'Write a validated date-stamped topic draft.',
+        inputSchema: z.object({
+          date: z.string(),
+          content: z.string(),
+          overwrite: z.boolean(),
+        }),
+      },
+      handler: async (args) => {
+        try {
+          return success(await operations().writeTopicDraft(args));
+        } catch {
+          return failure('Unable to write the topic draft');
+        }
+      },
+    },
+    finalize_topics: {
+      config: {
+        description: 'Finalize exactly one topic draft status marker.',
+        inputSchema: z.object({ date: z.string() }),
+      },
+      handler: async (args) => {
+        try {
+          return success(await operations().finalizeTopics(args));
+        } catch {
+          return failure('Unable to finalize the topic draft');
         }
       },
     },
