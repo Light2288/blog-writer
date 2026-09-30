@@ -7,8 +7,8 @@ description: Use when the user asks to draft, revise, finalize, or publish a bil
 
 Coordinate a bilingual English/Italian MDX article in the user's voice. The
 main chat authors and reviews all prose. The only output is one
-`drafts/<slug>.mdx` with `draft: true`, finalized and published only through
-explicit approval gates.
+`<workflow-root>/drafts/<slug>.mdx` with `draft: true`, finalized and published
+only through explicit approval gates.
 
 The main chat owns every user question, topic/slug choice, English review,
 bilingual review, overwrite choice, finalization approval, and publication
@@ -53,22 +53,38 @@ custom-agent mode.
 
 Never edit a source project, Codex history, or Git state. Never commit or push.
 
+## Workflow data root
+
+Resolve one absolute workflow data root before reading any Blog-Writer-owned
+artifact. In command-scoped mode, use the trusted workflow root supplied by
+the launcher. Otherwise run
+`git rev-parse --path-format=absolute --git-common-dir`, require the returned
+directory name to be `.git`, and use its parent directory. In a linked
+worktree this is the primary checkout, not the current code worktree.
+
+Root every reference to `CONVENTIONS.md`, `inputs/`, `drafts/`, and
+`published/` at this workflow root. Use absolute paths for shell reads and
+review links. The bridge independently applies the same root to every
+mutation. Never substitute the current working directory when it differs from
+the workflow root.
+
 ## Workflow
 
 Follow these nine steps in order.
 
 ### 1. Load and validate conventions
 
-Read `CONVENTIONS.md` every run. It is missing when absent or placeholder-only:
-all eight sections contain only `<!-- TODO: ... -->` or legacy `_Placeholder_`
-markers and no real guidance. If missing, ask in the main chat for the user to
-run `author-conventions` and refuse to draft. Never invent voice, structure,
-tag vocabulary, taboos, or bilingual policy.
+Read `<workflow-root>/CONVENTIONS.md` every run. It is missing when absent or
+placeholder-only: all eight sections contain only `<!-- TODO: ... -->` or
+legacy `_Placeholder_` markers and no real guidance. If missing, ask in the
+main chat for the user to run `author-conventions` and refuse to draft. Never
+invent voice, structure, tag vocabulary, taboos, or bilingual policy.
 
 ### 2. Resolve the topic and sources
 
-- For "write about topic N", read the most recent `inputs/topics-*.md`, select
-  Topic N, and preserve its title, topic key, angle, depth, and exact sources.
+- For "write about topic N", read the most recent
+  `<workflow-root>/inputs/topics-*.md`, select Topic N, and preserve its title,
+  topic key, angle, depth, and exact sources.
 - For a free-text request, use the user's topic and derive its topic key.
 - If the numbered topic or file is missing, ask the user to clarify.
 
@@ -82,15 +98,16 @@ not access SQLite, rollout files, arbitrary paths, or source files directly.
 
 Derive a canonical kebab-case slug from the working title: lowercase, replace
 runs of non-alphanumeric characters with `-`, collapse repeats, trim edges.
-Use `drafts/<slug>.mdx`. Carry a selected candidate's `topic_key`; otherwise use
-the same derivation as the slug. If the slug already exists in `drafts/`, ask
-before overwriting and pass `overwrite: true` only after that explicit choice.
+Use `<workflow-root>/drafts/<slug>.mdx`. Carry a selected candidate's
+`topic_key`; otherwise use the same derivation as the slug. If the slug already
+exists in `<workflow-root>/drafts/`, ask before overwriting and pass
+`overwrite: true` only after that explicit choice.
 
-If `published/<slug>.mdx` already exists, stop safely before drafting or
-finalizing. Published-slug replacement is unsupported. Ask the user to choose
-a new slug or handle replacement outside this workflow. Never tell the custom
-agent to bypass the bridge or imply that draft overwrite approval can replace a
-published article.
+If `<workflow-root>/published/<slug>.mdx` already exists, stop safely before
+drafting or finalizing. Published-slug replacement is unsupported. Ask the
+user to choose a new slug or handle replacement outside this workflow. Never
+tell the custom agent to bypass the bridge or imply that draft overwrite
+approval can replace a published article.
 
 ### 4. Draft the English body first
 
@@ -150,9 +167,10 @@ approval. Then run `publish_article` with the slug and today's local
 `YYYY-MM-DD` publication date.
 
 The bridge preserves the original `date`, refreshes `lastmod`, moves only a
-finalized file to `published/<slug>.mdx`, and idempotently records
-`topic_key | slug | publication date` in `inputs/published-topics.md`. Never
-auto-publish and never simulate these mutations with shell or file tools.
+finalized file to `<workflow-root>/published/<slug>.mdx`, and idempotently
+records `topic_key | slug | publication date` in
+`<workflow-root>/inputs/published-topics.md`. Never auto-publish and never
+simulate these mutations with shell or file tools.
 
 ## Required MDX format
 

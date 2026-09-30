@@ -102,9 +102,9 @@ assert_contains "$TOPIC_SKILL" "Follow these ten steps in order" \
   "topic skill preserves the ten-step workflow"
 assert_contains "$TOPIC_SKILL" "normalized activity" \
   "topic skill consumes normalized bridge activity"
-assert_contains "$TOPIC_SKILL" "Resolve relative entries against the Blog-Writer project root" \
+assert_contains "$TOPIC_SKILL" "Resolve relative entries against the workflow" \
   "topic skill normalizes relative allowlist entries"
-assert_contains "$TOPIC_SKILL" "Status: DRAFT" \
+assert_contains "$TOPIC_SKILL" "| Status | DRAFT |" \
   "topic skill writes DRAFT first"
 assert_contains "$TOPIC_SKILL" "finalize_topics" \
   "topic skill uses marker-only finalization"

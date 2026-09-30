@@ -417,6 +417,7 @@ export async function scanRollouts(options) {
     );
   stats.matchedSessions = matching.length;
   stats.sessionsTruncated = Math.max(0, matching.length - LIMITS.sessions);
+  const projects = [...new Set(matching.map(({ cwd }) => cwd))].sort();
 
   const normalized = [];
   for (const session of matching.slice(0, LIMITS.sessions)) {
@@ -440,5 +441,5 @@ export async function scanRollouts(options) {
     stats.transcriptTruncated = true;
   }
 
-  return { sessions: normalized, warnings, stats };
+  return { projects, sessions: normalized, warnings, stats };
 }

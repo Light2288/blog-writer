@@ -246,8 +246,11 @@ assert_contains .opencode/skills/extract-topics/SKILL.md 'inputs/topics-YYYY-MM-
   "OpenCode topic skill uses the run-date filename"
 assert_contains .agents/skills/extract-topics/SKILL.md 'inputs/topics-YYYY-MM-DD.md' \
   "Codex topic skill uses the run-date filename"
+assert_contains .opencode/skills/extract-topics/SKILL.md 'Status: DRAFT' \
+  ".opencode/skills/extract-topics/SKILL.md preserves DRAFT topics"
+assert_contains .agents/skills/extract-topics/SKILL.md '| Status | DRAFT |' \
+  ".agents/skills/extract-topics/SKILL.md preserves DRAFT topics"
 for skill in .opencode/skills/extract-topics/SKILL.md .agents/skills/extract-topics/SKILL.md; do
-  assert_contains "$skill" 'Status: DRAFT' "$skill preserves DRAFT topics"
   assert_contains "$skill" 'FINAL' "$skill preserves FINAL transition"
 done
 for skill in .opencode/skills/write-blog-article/SKILL.md .agents/skills/write-blog-article/SKILL.md; do

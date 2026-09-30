@@ -17,7 +17,16 @@ import { createTopicOperations } from '../src/topics.mjs';
 import { createTopicHandlers } from '../src/tools/topic.mjs';
 
 const DATE = '2026-09-28';
-const DRAFT = '# Candidate topics\n\nStatus: DRAFT\n\nOne topic.\n';
+const DRAFT = [
+  '# Candidate topics',
+  '',
+  '| Field | Value |',
+  '|---|---|',
+  '| Status | DRAFT |',
+  '',
+  'One topic.',
+  '',
+].join('\n');
 
 async function temporaryProject(t) {
   const root = await mkdtemp(path.join(tmpdir(), 'blog-writer-topics-'));
@@ -73,20 +82,22 @@ test('writeTopicDraft_writes_only_the_canonical_dated_topic_target', async (t) =
   }
 });
 
-test('writeTopicDraft_requires_exactly_one_Status_DRAFT_marker', async (t) => {
+test('writeTopicDraft_requires_exactly_one_DRAFT_status_row', async (t) => {
   const root = await temporaryProject(t);
   const operations = createTopicOperations({ projectRoot: root });
   const invalidContents = [
     '# Missing marker\n',
-    'Status: FINAL\n',
-    'Status: DRAFT\nbody\nStatus: DRAFT\n',
-    ' Status: DRAFT\n',
+    '| Status | FINAL |\n',
+    '| Status | DRAFT |\nbody\n| Status | DRAFT |\n',
+    '| Status | DRAFT |\nbody\n| Status | FINAL |\n',
+    '| Status | DRAFT |\nbody\nStatus: DRAFT\n',
+    'Status: DRAFT\n',
   ];
 
   for (const content of invalidContents) {
     await assert.rejects(
       operations.writeTopicDraft({ date: DATE, content, overwrite: false }),
-      /exactly one.*Status: DRAFT/i,
+      /exactly one.*DRAFT.*status/i,
     );
     assert.deepEqual(await inputState(root), []);
   }
@@ -96,7 +107,7 @@ test('writeTopicDraft_requires_explicit_overwrite_and_preserves_collisions', asy
   const root = await temporaryProject(t);
   const operations = createTopicOperations({ projectRoot: root });
   await writeFile(target(root), DRAFT);
-  const replacement = '# Revised\n\nStatus: DRAFT\n\nRevised topic.\n';
+  const replacement = '# Revised\n\n| Status | DRAFT |\n\nRevised topic.\n';
 
   await assert.rejects(
     operations.writeTopicDraft({
@@ -139,7 +150,7 @@ test('writeTopicDraft_rejects_a_symlink_target_without_touching_its_destination'
 test('finalizeTopics_changes_only_the_single_Status_marker', async (t) => {
   const root = await temporaryProject(t);
   const operations = createTopicOperations({ projectRoot: root });
-  const draft = '\uFEFF# Tópics\r\nStatus: DRAFT\r\n\r\nBytes stay: DRAFT\r\n';
+  const draft = '\uFEFF# Tópics\r\n| Status | DRAFT |\r\n\r\nBytes stay: DRAFT\r\n';
   await operations.writeTopicDraft({
     date: DATE,
     content: draft,
@@ -150,9 +161,9 @@ test('finalizeTopics_changes_only_the_single_Status_marker', async (t) => {
   const finalized = await readFile(target(root), 'utf8');
 
   assert.equal(result.path, await canonicalTarget(root));
-  assert.equal(finalized, draft.replace('Status: DRAFT', 'Status: FINAL'));
+  assert.equal(finalized, draft.replace('| Status | DRAFT |', '| Status | FINAL |'));
   assert.equal(
-    finalized.replace('Status: FINAL', 'Status: DRAFT'),
+    finalized.replace('| Status | FINAL |', '| Status | DRAFT |'),
     draft,
   );
 });
@@ -160,7 +171,7 @@ test('finalizeTopics_changes_only_the_single_Status_marker', async (t) => {
 test('finalizeTopics_rejects_invalid_UTF_8_without_rewriting_any_bytes', async (t) => {
   const root = await temporaryProject(t);
   const invalidUtf8 = Buffer.concat([
-    Buffer.from('# Topics\nStatus: DRAFT\nBefore invalid byte: ', 'utf8'),
+    Buffer.from('# Topics\n| Status | DRAFT |\nBefore invalid byte: ', 'utf8'),
     Buffer.from([0xff]),
     Buffer.from('\nAfter invalid byte.\n', 'utf8'),
   ]);
@@ -181,8 +192,10 @@ test('finalizeTopics_rejects_invalid_UTF_8_without_rewriting_any_bytes', async (
 test('finalizeTopics_rejects_missing_duplicate_and_already_final_markers_without_changes', async (t) => {
   const cases = [
     '# Missing marker\n',
-    'Status: DRAFT\nbody\nStatus: DRAFT\n',
-    'Status: FINAL\n',
+    '| Status | DRAFT |\nbody\n| Status | DRAFT |\n',
+    '| Status | DRAFT |\nbody\n| Status | FINAL |\n',
+    '| Status | DRAFT |\nbody\nStatus: DRAFT\n',
+    '| Status | FINAL |\n',
   ];
 
   for (const content of cases) {
@@ -194,7 +207,7 @@ test('finalizeTopics_rejects_missing_duplicate_and_already_final_markers_without
 
       await assert.rejects(
         operations.finalizeTopics({ date: DATE }),
-        /exactly one.*Status: DRAFT/i,
+        /exactly one.*DRAFT.*status/i,
       );
       assert.deepEqual(await inputState(root), before);
     });
@@ -229,7 +242,10 @@ test('createTopicHandlers_exposes_only_the_topic_mutation_arguments', async (t) 
 
   assert.equal(written.isError, undefined);
   assert.equal(finalized.isError, undefined);
-  assert.equal(await readFile(target(root), 'utf8'), DRAFT.replace('DRAFT', 'FINAL'));
+  assert.equal(
+    await readFile(target(root), 'utf8'),
+    DRAFT.replace('| Status | DRAFT |', '| Status | FINAL |'),
+  );
 });
 
 test('createTopicHandlers_returns_sanitized_structured_mutation_failures', async () => {

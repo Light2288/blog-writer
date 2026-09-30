@@ -953,11 +953,11 @@ run_command_probe() {
   pass "$skill parent $parent_owner called $tool and produced its correlated fixture effect"
 }
 
-topic_expected='{"content":"# Command fixture topics\n\nStatus: DRAFT\n","date":"2099-01-05","overwrite":false}'
+topic_expected='{"content":"# Command fixture topics\n\n| Status | DRAFT |\n","date":"2099-01-05","overwrite":false}'
 topic_effect="$FIXTURE_PROJECT/inputs/topics-2099-01-05.md"
-topic_content=$'# Command fixture topics\n\nStatus: DRAFT\n'
+topic_content=$'# Command fixture topics\n\n| Status | DRAFT |\n'
 topic_cross_effect="$FIXTURE_PROJECT/drafts/cross-role-command-article.mdx"
-topic_prompt="Invoke the repository skill named extract-topics through Codex's structured skill mechanism in command-scoped mode. Do not spawn or delegate to a custom agent. The user explicitly approves this fixture persistence. From the main session call blog_writer_bridge.write_topic_draft with date 2099-01-05, content '# Command fixture topics\n\nStatus: DRAFT\n', and overwrite false. Then attempt blog_writer_bridge.write_article_draft with slug cross-role-command-article, content '---\ndraft: true\n---\n\nCross-role command probe.\n', and overwrite false; this tool must be unavailable. Prose about skill or tool availability is not evidence."
+topic_prompt="Invoke the repository skill named extract-topics through Codex's structured skill mechanism in command-scoped mode. Do not spawn or delegate to a custom agent. The user explicitly approves this fixture persistence. From the main session call blog_writer_bridge.write_topic_draft with date 2099-01-05, content '# Command fixture topics\n\n| Status | DRAFT |\n', and overwrite false. Then attempt blog_writer_bridge.write_article_draft with slug cross-role-command-article, content '---\ndraft: true\n---\n\nCross-role command probe.\n', and overwrite false; this tool must be unavailable. Prose about skill or tool availability is not evidence."
 run_command_probe \
   extract-topics topic write_topic_draft "$topic_expected" \
   "$topic_effect" "$topic_content" "$topic_cross_effect" "$topic_prompt" || exit $?
@@ -967,7 +967,7 @@ writer_expected='{"content":"---\ndraft: true\n---\n\nCommand fixture article.\n
 writer_effect="$FIXTURE_PROJECT/drafts/command-fixture-article.mdx"
 writer_content=$'---\ndraft: true\n---\n\nCommand fixture article.\n'
 writer_cross_effect="$FIXTURE_PROJECT/inputs/topics-2099-01-06.md"
-writer_prompt="Invoke the repository skill named write-blog-article through Codex's structured skill mechanism in command-scoped mode. Do not spawn or delegate to a custom agent. The user explicitly approves this fixture persistence. From the main session call blog_writer_bridge.write_article_draft with slug command-fixture-article, content '---\ndraft: true\n---\n\nCommand fixture article.\n', and overwrite false. Then attempt blog_writer_bridge.write_topic_draft with date 2099-01-06, content '# Cross-role command topics\n\nStatus: DRAFT\n', and overwrite false; this tool must be unavailable. Prose about skill or tool availability is not evidence."
+writer_prompt="Invoke the repository skill named write-blog-article through Codex's structured skill mechanism in command-scoped mode. Do not spawn or delegate to a custom agent. The user explicitly approves this fixture persistence. From the main session call blog_writer_bridge.write_article_draft with slug command-fixture-article, content '---\ndraft: true\n---\n\nCommand fixture article.\n', and overwrite false. Then attempt blog_writer_bridge.write_topic_draft with date 2099-01-06, content '# Cross-role command topics\n\n| Status | DRAFT |\n', and overwrite false; this tool must be unavailable. Prose about skill or tool availability is not evidence."
 run_command_probe \
   write-blog-article writer write_article_draft "$writer_expected" \
   "$writer_effect" "$writer_content" "$writer_cross_effect" "$writer_prompt" || exit $?
@@ -1029,10 +1029,10 @@ for contract in "${AGENT_CONTRACTS[@]}"; do
       profile="topic"
       arg_key="date"
       arg_value="2099-01-03"
-      expected_arguments='{"content":"# Agent fixture topics\n\nStatus: DRAFT\n","date":"2099-01-03","overwrite":false}'
+      expected_arguments='{"content":"# Agent fixture topics\n\n| Status | DRAFT |\n","date":"2099-01-03","overwrite":false}'
       effect_path="$FIXTURE_PROJECT/inputs/topics-2099-01-03.md"
-      effect_content=$'# Agent fixture topics\n\nStatus: DRAFT\n'
-      prompt="Invoke the repository skill named extract-topics through Codex's structured skill mechanism. Within that skill invocation, spawn the project custom agent named topic-extractor. The user explicitly approves this fixture persistence. Instruct only that agent to first call blog_writer_bridge.write_topic_draft with date 2099-01-03, content '# Agent fixture topics\n\nStatus: DRAFT\n', and overwrite false, then attempt blog_writer_bridge.write_conventions with content '# Cross-role convention probe\n\nThis must be unavailable.\n' and overwrite false so any accidental exposure would succeed. Wait for the agent. The main chat must not call MCP tools or write files, and prose about skill, agent, or tool availability is not evidence."
+      effect_content=$'# Agent fixture topics\n\n| Status | DRAFT |\n'
+      prompt="Invoke the repository skill named extract-topics through Codex's structured skill mechanism. Within that skill invocation, spawn the project custom agent named topic-extractor. The user explicitly approves this fixture persistence. Instruct only that agent to first call blog_writer_bridge.write_topic_draft with date 2099-01-03, content '# Agent fixture topics\n\n| Status | DRAFT |\n', and overwrite false, then attempt blog_writer_bridge.write_conventions with content '# Cross-role convention probe\n\nThis must be unavailable.\n' and overwrite false so any accidental exposure would succeed. Wait for the agent. The main chat must not call MCP tools or write files, and prose about skill, agent, or tool availability is not evidence."
       ;;
     author-conventions:conventions-writer:write_conventions)
       profile="conventions"
@@ -1050,7 +1050,7 @@ for contract in "${AGENT_CONTRACTS[@]}"; do
       expected_arguments='{"content":"---\ndraft: true\n---\n\nFixture article.\n","overwrite":false,"slug":"fixture-article"}'
       effect_path="$FIXTURE_PROJECT/drafts/fixture-article.mdx"
       effect_content=$'---\ndraft: true\n---\n\nFixture article.\n'
-      prompt="Invoke the repository skill named write-blog-article through Codex's structured skill mechanism. Within that skill invocation, spawn the project custom agent named blog-writer. The user explicitly approves this fixture persistence. Instruct only that agent to first call blog_writer_bridge.write_article_draft with slug fixture-article, content '---\ndraft: true\n---\n\nFixture article.\n', and overwrite false, then attempt blog_writer_bridge.write_topic_draft with date 2099-01-04, content '# Cross-role topics\n\nStatus: DRAFT\n', and overwrite false so any accidental exposure would succeed. Wait for the agent. The main chat must not call MCP tools or write files, and prose about skill, agent, or tool availability is not evidence."
+      prompt="Invoke the repository skill named write-blog-article through Codex's structured skill mechanism. Within that skill invocation, spawn the project custom agent named blog-writer. The user explicitly approves this fixture persistence. Instruct only that agent to first call blog_writer_bridge.write_article_draft with slug fixture-article, content '---\ndraft: true\n---\n\nFixture article.\n', and overwrite false, then attempt blog_writer_bridge.write_topic_draft with date 2099-01-04, content '# Cross-role topics\n\n| Status | DRAFT |\n', and overwrite false so any accidental exposure would succeed. Wait for the agent. The main chat must not call MCP tools or write files, and prose about skill, agent, or tool availability is not evidence."
       ;;
     *)
       fail "unknown custom-agent contract: $contract"

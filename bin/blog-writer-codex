@@ -84,6 +84,19 @@ bridge_sdk="$project_root/codex-bridge/node_modules/@modelcontextprotocol/sdk"
 [ -f "$bridge_entrypoint" ] || error "bridge entrypoint is missing: $bridge_entrypoint"
 [ -d "$bridge_sdk" ] || \
   error "bridge dependencies are missing; run npm install --prefix codex-bridge"
+command -v git >/dev/null 2>&1 || \
+  error "Git 'git' was not found on PATH"
+
+if ! git_common_dir="$(git -C "$project_root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
+  error "could not resolve the Blog-Writer Git common directory"
+fi
+if [ "${git_common_dir##*/}" != ".git" ]; then
+  error "Blog-Writer requires a standard Git working tree"
+fi
+if ! workflow_root="$(cd "${git_common_dir%/*}" 2>/dev/null && pwd -P)"; then
+  error "could not resolve the Blog-Writer workflow data root"
+fi
+prompt="$prompt Workflow data root (trusted launcher configuration): $workflow_root"
 
 bridge_command='mcp_servers.blog_writer_bridge.command="node"'
 bridge_args="mcp_servers.blog_writer_bridge.args=[\"codex-bridge/src/server.mjs\",\"--profile\",\"$profile\"]"

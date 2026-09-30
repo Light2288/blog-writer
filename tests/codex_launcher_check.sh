@@ -6,6 +6,8 @@ set -u
 SCRIPT_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd -P)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 LAUNCHER="$ROOT/bin/blog-writer-codex"
+GIT_COMMON_DIR="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)"
+WORKFLOW_ROOT="$(cd "${GIT_COMMON_DIR%/*}" && pwd -P)"
 FAIL=0
 
 pass() { printf 'PASS: %s\n' "$1"; }
@@ -81,11 +83,11 @@ run_capture() {
 
 validate_capture() {
   local mode="$1" prompt_fragment="$2" prompt_data="${3:-}"
-  python3 - "$CAPTURE/args" "$CAPTURE/cwd" "$ROOT" "$mode" "$prompt_fragment" "$prompt_data" <<'PY'
+  python3 - "$CAPTURE/args" "$CAPTURE/cwd" "$ROOT" "$WORKFLOW_ROOT" "$mode" "$prompt_fragment" "$prompt_data" <<'PY'
 import pathlib
 import sys
 
-args_path, cwd_path, root, mode, prompt_fragment, prompt_data = sys.argv[1:]
+args_path, cwd_path, root, workflow_root, mode, prompt_fragment, prompt_data = sys.argv[1:]
 args = pathlib.Path(args_path).read_bytes().split(b"\0")
 if args[-1] == b"":
     args.pop()
@@ -111,6 +113,7 @@ prompt = args[10]
 assert skill in prompt
 assert "command-scoped mode" in prompt
 assert "Do not delegate to a custom agent" in prompt
+assert f"Workflow data root (trusted launcher configuration): {workflow_root}" in prompt
 assert prompt_fragment in prompt
 if prompt_data:
     assert prompt_data in prompt

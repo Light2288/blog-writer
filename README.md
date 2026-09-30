@@ -76,7 +76,7 @@ Ask it to extract topics, e.g. *"extract topics from last week"*. It:
    Overall score, and writes a DRAFT topics file to `inputs/topics-YYYY-MM-DD.md`
    (named by the run date — so same-week re-runs don't collide — with the ISO
    week, window, and a `Generated:` timestamp recorded inside). On your approval
-   it flips `Status: DRAFT` to `Status: FINAL`.
+   it flips the status table row from `DRAFT` to `FINAL`.
 
 It never writes an article itself.
 
@@ -87,9 +87,10 @@ subject. It reads `CONVENTIONS.md`, drafts the **English body first** and
 iterates with you, then translates to Italian and assembles a single
 bilingual `drafts/<slug>.mdx` with frontmatter `draft: true` and a stable
 `topic_key`. On your explicit *"publish &lt;slug&gt;"* command it flips
-`draft: false`, moves the file to `published/<slug>.mdx`, and records the
-`topic_key` in `inputs/published-topics.md` so the topic-extractor won't
-resurface it. It never edits source projects and never commits or pushes.
+`draft: false`, preserves the original `date`, refreshes `lastmod`, moves the
+file to `published/<slug>.mdx`, and records the `topic_key` in
+`inputs/published-topics.md` so the topic-extractor won't resurface it. It
+never edits source projects and never commits or pushes.
 
 ## Using Codex
 
@@ -106,15 +107,22 @@ npm install --prefix codex-bridge
 
 The topics command opens an interactive Codex session with only the `topic`
 bridge profile. Confirm the discovered projects, review the resulting
-`Status: DRAFT` topic list, request any changes, and explicitly approve its
-finalization before starting the article command. Topic finalization does not
-start article writing.
+topic list whose status table row is `DRAFT`, request any changes, and
+explicitly approve its finalization before starting the article command. Topic
+finalization does not start article writing.
 
 The article command opens a separate interactive session with only the
 `writer` profile. Review and approve the English draft first, then review the
 bilingual DRAFT and explicitly approve finalization.
 Article finalization does not publish. Publication remains a later, separate
-`publish <slug>` command.
+`publish <slug>` command that preserves `date`, refreshes `lastmod`, moves the
+article to `published/`, and updates the published-topic ledger.
+
+The launcher may execute bridge code and repository skills from a linked
+development worktree, but it resolves Git's primary checkout as the workflow
+data root. Consequently `CONVENTIONS.md`, `tracked-projects.txt`, `inputs/`,
+`drafts/`, and `published/` are always read from and written to the primary
+Blog-Writer checkout, matching the OpenCode workflow.
 
 The launcher uses the current configured model, `--no-daemon`, a read-only
 sandbox, and one fixed invocation-scoped bridge profile. It never derives MCP

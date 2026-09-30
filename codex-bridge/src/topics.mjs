@@ -11,16 +11,20 @@ import {
   resolveProjectRoot,
 } from './paths.mjs';
 
-const DRAFT_MARKER = /^Status: DRAFT(?=\r?$)/gmu;
+const DRAFT_STATUS_ROW =
+  /^(\|[ \t]*Status[ \t]*\|[ \t]*)DRAFT([ \t]*\|[ \t]*)(?=\r?$)/gmu;
+const STATUS_DECLARATION =
+  /^(?:\|[ \t]*Status[ \t]*\|[^\r\n]*|[ \t]*Status[ \t]*:[^\r\n]*)(?=\r?$)/gmu;
 const UTF8_DECODER = new TextDecoder('utf-8', {
   fatal: true,
   ignoreBOM: true,
 });
 
-function assertOneDraftMarker(content) {
-  const matches = content.match(DRAFT_MARKER) ?? [];
-  if (matches.length !== 1) {
-    throw new Error('Topic content must contain exactly one Status: DRAFT marker');
+function assertOneDraftStatusRow(content) {
+  const draftRows = content.match(DRAFT_STATUS_ROW) ?? [];
+  const statusDeclarations = content.match(STATUS_DECLARATION) ?? [];
+  if (draftRows.length !== 1 || statusDeclarations.length !== 1) {
+    throw new Error('Topic content must contain exactly one DRAFT status row');
   }
 }
 
@@ -32,7 +36,7 @@ function validateWriteArguments({ date, content, overwrite }) {
   if (typeof overwrite !== 'boolean') {
     throw new Error('Topic overwrite approval must be explicit');
   }
-  assertOneDraftMarker(content);
+  assertOneDraftStatusRow(content);
 }
 
 async function readRegularFile(target) {
@@ -109,8 +113,8 @@ export async function writeTopicDraft(args, context) {
 export async function finalizeTopics({ date }, context) {
   const target = await topicTarget(context, date);
   const { content, snapshot } = await readRegularFile(target);
-  assertOneDraftMarker(content);
-  const finalized = content.replace(DRAFT_MARKER, 'Status: FINAL');
+  assertOneDraftStatusRow(content);
+  const finalized = content.replace(DRAFT_STATUS_ROW, '$1FINAL$2');
   await context.atomicWriteImpl(target, finalized, {
     expectedTarget: snapshot,
     maxBytes: LIMITS.generatedFileBytes,

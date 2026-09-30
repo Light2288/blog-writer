@@ -11,9 +11,10 @@ scheduled run.
 
 ## Shared workflow invariants
 
-- **DRAFT-first.** Persist `Status: DRAFT` for topics or `draft: true` for an
-  article before asking a short review question. Finalize only after explicit
-  approval. Never embed a file body or large markdown in a question.
+- **DRAFT-first.** Persist a topic table row with `Status` set to `DRAFT`, or
+  `draft: true` for an article, before asking a short review question. Finalize
+  only after explicit approval. Never embed a file body or large markdown in a
+  question.
 - **Real conventions required.** `CONVENTIONS.md` is invalid when missing or
   placeholder-only. Refuse to draft until it contains real guidance; a single
   placeholder is not sufficient.
@@ -65,6 +66,11 @@ registers no privileged MCP bridge. Each standalone file under
 --profile <role>` server and may use only that matching profile. Custom agents
 never question the user; they return concise structured results to the main
 chat.
+
+When Codex code runs from a linked worktree, that worktree is only the code
+root. Resolve the Git common directory and use its primary checkout as the
+workflow data root for `CONVENTIONS.md`, `tracked-projects.txt`, `inputs/`,
+`drafts/`, and `published/`.
 
 All intended Codex writes pass through narrow bridge operations. Never add a
 general shell, arbitrary file tool, caller-supplied project root, or cross-role

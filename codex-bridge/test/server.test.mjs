@@ -1,14 +1,25 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, symlink } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import {
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 import { createServer, registerProfileTools } from '../src/server.mjs';
+
+const run = promisify(execFile);
 
 const EXPECTED_PROFILE_TOOL_NAMES = {
   topic: [
@@ -145,6 +156,74 @@ test('cli_starts_when_entrypoint_path_uses_a_symlink', async () => {
         listed.tools.map(({ name }) => name),
         ['write_conventions'],
       );
+    } finally {
+      await client.close();
+    }
+  } finally {
+    await rm(scratch, { force: true, recursive: true });
+  }
+});
+
+test('cli_writes_workflow_artifacts_to_the_primary_checkout_from_a_linked_worktree', async () => {
+  const serverPath = fileURLToPath(
+    new URL('../src/server.mjs', import.meta.url),
+  );
+  const scratch = await mkdtemp(join(tmpdir(), 'bridge-workflow-root-'));
+  const primary = join(scratch, 'primary');
+  const worktree = join(scratch, 'worktree');
+
+  try {
+    await run('git', ['init', '--quiet', primary]);
+    await run('git', ['-C', primary, 'config', 'user.name', 'Synthetic Tester']);
+    await run('git', [
+      '-C',
+      primary,
+      'config',
+      'user.email',
+      'synthetic@example.invalid',
+    ]);
+    await writeFile(join(primary, 'README.md'), 'fixture\n');
+    await run('git', ['-C', primary, 'add', 'README.md']);
+    await run('git', ['-C', primary, 'commit', '--quiet', '-m', 'fixture']);
+    await run('git', [
+      '-C',
+      primary,
+      'worktree',
+      'add',
+      '--quiet',
+      '-b',
+      'fixture-worktree',
+      worktree,
+    ]);
+
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [serverPath, '--profile', 'conventions'],
+      cwd: worktree,
+      stderr: 'pipe',
+    });
+    const client = new Client({ name: 'workflow-root-test', version: '1.0.0' });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: 'write_conventions',
+        arguments: {
+          content: '# Primary conventions\n',
+          overwrite: false,
+        },
+      });
+
+      assert.deepEqual(result.structuredContent, {
+        path: join(await realpath(primary), 'CONVENTIONS.md'),
+      });
+      assert.equal(
+        await readFile(join(primary, 'CONVENTIONS.md'), 'utf8'),
+        '# Primary conventions\n',
+      );
+      await assert.rejects(readFile(join(worktree, 'CONVENTIONS.md')), {
+        code: 'ENOENT',
+      });
     } finally {
       await client.close();
     }

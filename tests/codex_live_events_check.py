@@ -19,7 +19,7 @@ EXPECTED_TOOLS = [
 ]
 EXPECTED_ARGUMENTS = {
     "date": "2099-01-03",
-    "content": "# Agent fixture topics\n\nStatus: DRAFT\n",
+    "content": "# Agent fixture topics\n\n| Status | DRAFT |\n",
     "overwrite": False,
 }
 
@@ -410,7 +410,7 @@ class LiveEventVerifierTests(unittest.TestCase):
     def test_rejects_call_arguments_with_the_wrong_sentinel_content(self):
         wrong_arguments = {
             **EXPECTED_ARGUMENTS,
-            "content": "# Wrong fixture content\n\nStatus: DRAFT\n",
+            "content": "# Wrong fixture content\n\n| Status | DRAFT |\n",
         }
         result = self.run_verifier(
             [
