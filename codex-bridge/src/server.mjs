@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -77,7 +78,10 @@ async function startCli() {
 }
 
 const entrypoint = process.argv[1];
-if (entrypoint && fileURLToPath(import.meta.url) === entrypoint) {
+if (
+  entrypoint &&
+  realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entrypoint)
+) {
   startCli().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

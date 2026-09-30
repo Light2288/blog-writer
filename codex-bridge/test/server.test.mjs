@@ -1,5 +1,12 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, symlink } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 import { createServer, registerProfileTools } from '../src/server.mjs';
 
@@ -110,5 +117,38 @@ test('createServer_constructs_completed_real_handlers_without_injection', () => 
       assert.equal(typeof registration.config.description, 'string');
       assert.notEqual(registration.config.description.length, 0);
     }
+  }
+});
+
+test('cli_starts_when_entrypoint_path_uses_a_symlink', async () => {
+  const serverPath = fileURLToPath(
+    new URL('../src/server.mjs', import.meta.url),
+  );
+  const scratch = await mkdtemp(join(tmpdir(), 'bridge-entrypoint-'));
+  const linkedServerPath = join(scratch, 'server.mjs');
+  await symlink(serverPath, linkedServerPath);
+
+  try {
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [linkedServerPath, '--profile', 'conventions'],
+      cwd: dirname(dirname(serverPath)),
+      stderr: 'pipe',
+    });
+    const client = new Client({ name: 'entrypoint-test', version: '1.0.0' });
+
+    try {
+      await client.connect(transport);
+      const listed = await client.listTools();
+
+      assert.deepEqual(
+        listed.tools.map(({ name }) => name),
+        ['write_conventions'],
+      );
+    } finally {
+      await client.close();
+    }
+  } finally {
+    await rm(scratch, { force: true, recursive: true });
   }
 });
