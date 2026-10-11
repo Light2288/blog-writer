@@ -41,6 +41,15 @@ everything statically verifiable.
   npm install --prefix codex-bridge
   ```
 
+- Confirm the repository launcher can find `codex` and Node.js on `PATH`:
+
+  ```bash
+  ./bin/blog-writer-codex topics "last week"
+  ```
+
+  This opens an interactive session; exit it after confirming startup if this
+  is only a prerequisite check.
+
 - For OpenCode runtime scenarios, quit and **restart OpenCode** first so
   `.opencode/opencode.json`, the agents, and the skills are loaded.
 - For Codex runtime scenarios, trust this project in Codex CLI or Codex
@@ -79,6 +88,7 @@ Or run each verifier individually:
 | `tests/permission_check.sh` | Step 05 permission boundary & destructive-command denial (config-level always; live runtime opt-in via `ACCEPTANCE_RUNTIME=1`). |
 | `tests/redaction_check.sh` | Step 05 deterministic redaction/flagging using fixtures (no live DB). |
 | `tests/codex_scaffold_check.sh` | Codex skill discovery anchors, custom-agent profile isolation, and read-only project configuration. |
+| `tests/codex_launcher_check.sh` | Command usage, prerequisite failures, exact fixed-profile argv, prompt-data isolation, and exit propagation using a fake Codex executable. |
 | `npm test --prefix codex-bridge` | Bridge unit/integration behavior using synthetic rollout and temporary Git/project fixtures. |
 | `tests/codex_acceptance_check.sh` | Cross-runtime AC-01 through AC-19 static/deterministic anchors and documentation contracts. |
 | `tests/codex_live_check.sh` | Opt-in live Codex checks; defaults to `SKIP` and is never called by `run_all.sh`. |
@@ -114,22 +124,56 @@ CODEX_ACCEPTANCE_RUNTIME=1 bash tests/codex_live_check.sh
 When the variable is unset, the script prints `SKIP` and exits 0. When enabled,
 it creates a temporary trusted fixture project and isolated `CODEX_HOME`, copies
 only authentication material needed for the invocation, and provides synthetic
-rollout history. It verifies repository skill and custom-agent visibility,
-exact MCP tool lists for the `topic`, `conventions`, and `writer` profiles, a
-rejected direct write in the read-only Codex sandbox, and a successful scoped
-MCP write inside the fixture. It never uses the real rollout store for a write
-or destructive-boundary probe.
+rollout history. Its acceptance gate launches main-session topic and writer
+probes with `--no-daemon`, a read-only sandbox, and exactly one invocation-scoped
+bridge profile. Structured events must prove the expected main-session tool
+call, exact arguments, exact profile catalog, fixture effect, and absence of a
+cross-role effect. Custom-agent MCP propagation remains diagnostic: it reports
+PASS when the runtime propagates the child configuration and a non-gating SKIP
+when the known upstream limitation is present. A demonstrated cross-role call
+or out-of-fixture effect still fails. The verifier never uses the real rollout
+store for a write or destructive-boundary probe.
+
+### Reliable Codex workflow smoke test
+
+Run the topic workflow first:
+
+```bash
+./bin/blog-writer-codex topics "last week"
+```
+
+Confirm the projects, inspect the persisted list whose status table row is
+`DRAFT`, request any edits, and explicitly approve finalization. Topic
+finalization does not start the article workflow.
+
+Then run the article workflow in a separate session:
+
+```bash
+./bin/blog-writer-codex article "topic 2"
+```
+
+Approve the English body before translation, review the bilingual DRAFT, and
+explicitly approve finalization. Article finalization does not publish; only a
+later explicit `publish <slug>` instruction authorizes publication.
+
+The launcher fails locally with usage or a prerequisite message for an unknown
+subcommand, missing article subject, missing `codex`/Node.js, missing bridge
+entrypoint, or missing bridge dependencies. It propagates Codex model/service
+failures without selecting a different model. The ordinary Desktop/custom-agent
+path remains available only when that runtime propagates the custom agent's MCP
+configuration correctly.
 
 ## OpenCode manual runtime script
 
 Restart OpenCode, then walk these scenarios inside the project. For each, send
 the prompt and confirm the expected observation.
 
-For a manual Codex smoke test in a trusted project chat, use “Use
+For a conditional custom-agent smoke test in a trusted project chat, use “Use
 `extract-topics` to find topics from last week”, “Use `write-blog-article` to
 write about topic 2”, or “Use `author-conventions` to complete the writing
-conventions”. The main chat must keep the review questions and approvals while
-delegating only bounded operations to the matching custom agent.
+conventions”. This is diagnostic on runtimes that do not propagate child MCP
+configuration. When supported, the main chat must keep the review questions and
+approvals while delegating only bounded operations to the matching custom agent.
 
 ### Scenario 1 — Fresh-clone readiness
 
@@ -140,9 +184,9 @@ usable with no other setup; `tracked-projects.txt` remains optional.
 ### Scenario 2 — Extractor DRAFT
 
 Invoke `topic-extractor`: *"extract topics from last week"*.
-**Observe**: `inputs/topics-YYYY-MM-DD.md` is created with `Status: DRAFT`, a
-correct frontmatter table, candidate topics with correlated commit + session
-sources, and an appendix.
+**Observe**: `inputs/topics-YYYY-MM-DD.md` is created with one status table row
+set to `DRAFT`, candidate topics with correlated commit + session sources, and
+an appendix.
 
 ### Scenario 3 — Auto-discovery path
 
@@ -234,7 +278,7 @@ read-only SQL assertion in `bash tests/acceptance_check.sh`.
 | Scenario | Check | Parent acceptance criterion |
 |----------|-------|-----------------------------|
 | 1 Fresh-clone readiness | `acceptance_check.sh` + manual | Fresh clone works after editing `CONVENTIONS.md`; `tracked-projects.txt` optional |
-| 2 Extractor DRAFT | manual + `extract_topics_check.sh` | Running topic-extractor produces `topics-YYYY-MM-DD.md` with `Status: DRAFT` |
+| 2 Extractor DRAFT | manual + `extract_topics_check.sh` | Running topic-extractor produces `topics-YYYY-MM-DD.md` with its status table row set to `DRAFT` |
 | 3 Auto-discovery | manual + `extract_topics_check.sh` | Absent allowlist → auto-discovers and confirms via `question` |
 | 4 Allowlist | manual | Allowlist present → only listed projects considered |
 | 5 Redaction/flagging | `redaction_check.sh` | Sensitive-keyword detection flags matching topics |

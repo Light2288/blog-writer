@@ -1,5 +1,9 @@
 # Command-Scoped Codex Workflows
 
+**Slug:** `command-scoped-codex-workflows`
+**Status:** APPROVED
+**Provenance:** User-approved command-scoped workaround for missing custom-agent MCP propagation.
+
 ## Context
 
 Blog-Writer currently expects the main Codex chat to delegate bounded topic,

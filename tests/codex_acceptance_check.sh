@@ -246,8 +246,11 @@ assert_contains .opencode/skills/extract-topics/SKILL.md 'inputs/topics-YYYY-MM-
   "OpenCode topic skill uses the run-date filename"
 assert_contains .agents/skills/extract-topics/SKILL.md 'inputs/topics-YYYY-MM-DD.md' \
   "Codex topic skill uses the run-date filename"
+assert_contains .opencode/skills/extract-topics/SKILL.md 'Status: DRAFT' \
+  ".opencode/skills/extract-topics/SKILL.md preserves DRAFT topics"
+assert_contains .agents/skills/extract-topics/SKILL.md '| Status | DRAFT |' \
+  ".agents/skills/extract-topics/SKILL.md preserves DRAFT topics"
 for skill in .opencode/skills/extract-topics/SKILL.md .agents/skills/extract-topics/SKILL.md; do
-  assert_contains "$skill" 'Status: DRAFT' "$skill preserves DRAFT topics"
   assert_contains "$skill" 'FINAL' "$skill preserves FINAL transition"
 done
 for skill in .opencode/skills/write-blog-article/SKILL.md .agents/skills/write-blog-article/SKILL.md; do
@@ -370,6 +373,57 @@ assert_contains AGENTS.md 'placeholder-only' \
   "project guidance rejects placeholder-only conventions"
 assert_contains AGENTS.md 'not indexed' \
   "project guidance states time_updated is not indexed"
+
+echo "== AC-20 through AC-23: command-scoped Codex workflows =="
+assert_file bin/blog-writer-codex
+if [ -x bin/blog-writer-codex ]; then
+  pass "command-scoped launcher is executable"
+else
+  fail "command-scoped launcher must be executable"
+fi
+assert_file tests/codex_launcher_check.sh
+if bash tests/codex_launcher_check.sh; then
+  pass "launcher behavior and fixed-profile argv pass deterministically"
+else
+  fail "launcher behavior checks failed"
+fi
+assert_contains tests/run_all.sh 'tests/codex_launcher_check.sh' \
+  "default suite includes launcher checks"
+assert_absent tests/run_all.sh 'tests/codex_live_check.sh' \
+  "default suite still excludes live Codex checks"
+
+for skill in .agents/skills/extract-topics/SKILL.md .agents/skills/write-blog-article/SKILL.md; do
+  assert_contains "$skill" '### Command-scoped mode' \
+    "$skill documents command-scoped execution"
+  assert_contains "$skill" '### Custom-agent mode' \
+    "$skill preserves custom-agent fallback"
+  assert_contains "$skill" 'partial matching surface' \
+    "$skill fails closed on partial bridge exposure"
+  assert_contains "$skill" 'cross-role bridge tool' \
+    "$skill fails closed on cross-role bridge exposure"
+done
+
+assert_contains "$LIVE_CHECK" 'verify_command_events' \
+  "live Codex checks verify structured main-session events"
+assert_contains "$LIVE_CHECK" 'CODEX_LIVE_COMMAND_EVENT_FIXTURE' \
+  "main-session event verification has offline fixtures"
+assert_contains "$LIVE_CHECK" 'custom-agent MCP propagation remains diagnostic' \
+  "custom-agent propagation is explicitly non-gating"
+
+for doc in README.md docs/acceptance.md; do
+  assert_contains "$doc" './bin/blog-writer-codex topics "last week"' \
+    "$doc documents the reliable topic command"
+  assert_contains "$doc" './bin/blog-writer-codex article "topic 2"' \
+    "$doc documents the reliable article command"
+  assert_contains "$doc" '--no-daemon' \
+    "$doc documents daemon isolation"
+  assert_contains_ci "$doc" 'custom-agent' \
+    "$doc documents the conditional custom-agent path"
+  assert_contains_ci "$doc" 'diagnostic' \
+    "$doc labels custom-agent live evidence as diagnostic"
+  assert_contains_ci "$doc" 'does not publish' \
+    "$doc keeps finalization separate from publication"
+done
 
 echo
 if [ "$FAIL" -eq 0 ]; then

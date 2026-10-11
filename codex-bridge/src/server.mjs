@@ -1,6 +1,10 @@
+import { execFile } from 'node:child_process';
 import { realpathSync } from 'node:fs';
+import { realpath } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 import { PROFILE_TOOL_NAMES, parseProfile } from './profiles.mjs';
 import { createConventionsHandlers } from './tools/conventions.mjs';
@@ -8,6 +12,7 @@ import { createTopicHandlers } from './tools/topic.mjs';
 import { createWriterHandlers } from './tools/writer.mjs';
 
 const require = createRequire(import.meta.url);
+const run = promisify(execFile);
 
 function loadSdk() {
   const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
@@ -64,12 +69,27 @@ export function createServer({ profile, projectRoot, dependencies }) {
   return server;
 }
 
+export async function resolveWorkflowRoot(projectRoot) {
+  const { stdout } = await run('git', [
+    '-C',
+    projectRoot,
+    'rev-parse',
+    '--path-format=absolute',
+    '--git-common-dir',
+  ]);
+  const commonDirectory = await realpath(stdout.trim());
+  if (path.basename(commonDirectory) !== '.git') {
+    throw new Error('Blog-Writer requires a standard Git working tree');
+  }
+  return realpath(path.dirname(commonDirectory));
+}
+
 async function startCli() {
   const profile = parseProfile(process.argv.slice(2));
   const dependencies = {};
   const server = createServer({
     profile,
-    projectRoot: process.cwd(),
+    projectRoot: await resolveWorkflowRoot(process.cwd()),
     dependencies,
   });
   const transport = new (loadSdk().StdioServerTransport)();

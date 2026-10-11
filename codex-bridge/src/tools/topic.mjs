@@ -62,9 +62,7 @@ export function createTopicHandlers(options = {}) {
             hi: args.hi,
           });
           return success({
-            projects: [
-              ...new Set(result.sessions.map(({ project_dir }) => project_dir)),
-            ].sort(),
+            projects: result.projects,
             warnings: result.warnings,
             stats: result.stats,
           });

@@ -54,6 +54,7 @@ done
 # Additive Codex checks remain offline and deterministic. The live Codex
 # verifier is intentionally excluded; run it explicitly with its env gate.
 run_script "tests/codex_scaffold_check.sh"
+run_script "tests/codex_launcher_check.sh"
 
 printf '\n########## npm test --prefix codex-bridge ##########\n'
 if npm test --prefix codex-bridge; then

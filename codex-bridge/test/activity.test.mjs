@@ -198,6 +198,44 @@ test('collectActivity_applies_transcript_limit_before_appending_git_records', as
   assert.equal(result.stats.totalRecords, 21);
 });
 
+test('discover_projects_keeps_projects_hidden_by_the_transcript_budget', async (t) => {
+  const home = await codexHome(t);
+  const busyProject = '/synthetic/busy-project';
+  const olderProject = '/synthetic/older-project';
+  const writes = [];
+  for (let index = 0; index < 20; index += 1) {
+    writes.push(
+      writeRollout(
+        path.join(home.sessions, `busy-${index}.jsonl`),
+        rollout({
+          id: `busy-session-${index}`,
+          cwd: busyProject,
+          timestamp: new Date(LO + 100 + index).toISOString(),
+          text: 'word '.repeat(LIMITS.charactersPerSession / 5),
+        })
+      )
+    );
+  }
+  writes.push(
+    writeRollout(
+      path.join(home.sessions, 'older-project.jsonl'),
+      rollout({
+        id: 'older-project-session',
+        cwd: olderProject,
+        timestamp: new Date(LO + 1).toISOString(),
+      })
+    )
+  );
+  await Promise.all(writes);
+
+  const result = await createTopicHandlers({
+    codexHome: home.root,
+  }).discover_projects.handler({ lo: LO, hi: HI });
+
+  assert.deepEqual(result.structuredContent.projects, [busyProject, olderProject]);
+  assert.equal(result.structuredContent.stats.transcriptTruncated, true);
+});
+
 test('createTopicHandlers_validates_bounds_and_paths_without_leaking_exceptions', async () => {
   const handlers = createTopicHandlers({
     collectActivityImpl: async () => {

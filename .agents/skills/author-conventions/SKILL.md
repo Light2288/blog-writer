@@ -5,14 +5,26 @@ description: Use when the user asks to create or update the project's writing co
 
 # Author Conventions
 
-Interview the user and maintain the root `CONVENTIONS.md`. Never edit
-`CONVENTIONS.template.md`; it is the pristine starter. Only the matching
-bridge operation may persist the assembled conventions.
+Interview the user and maintain `<workflow-root>/CONVENTIONS.md`. Never edit
+`<workflow-root>/CONVENTIONS.template.md`; it is the pristine starter. Only
+the matching bridge operation may persist the assembled conventions.
 
 Delegate only to `conventions-writer`. The main chat owns every user question,
 answer interpretation, conflict resolution, overwrite choice, and final review.
 Never ask a custom agent to question the user. The custom agent only calls
 `write_conventions` with content already assembled in the main chat.
+
+## Workflow data root
+
+Resolve one absolute workflow data root before reading either conventions
+file. Run `git rev-parse --path-format=absolute --git-common-dir`, require the
+returned directory name to be `.git`, and use its parent directory. In a
+linked worktree this is the primary checkout, not the current code worktree.
+
+Read both conventions files through absolute paths rooted there. The bridge
+independently applies the same root when it writes `CONVENTIONS.md`. Never
+substitute the current working directory when it differs from the workflow
+root.
 
 ## Placeholder and structure rules
 
@@ -35,13 +47,14 @@ Keep these headings in this order:
 
 ### 1. Load or seed the document
 
-Read `CONVENTIONS.md` and `CONVENTIONS.template.md`. If the root file is absent
-or placeholder-only, use the template as the in-memory starting document. If
-some sections contain real guidance, preserve it byte-for-byte unless the user
-asks to revise that section. Do not persist a seed merely to ask questions.
+Read `<workflow-root>/CONVENTIONS.md` and
+`<workflow-root>/CONVENTIONS.template.md`. If the root file is absent or
+placeholder-only, use the template as the in-memory starting document. If some
+sections contain real guidance, preserve it byte-for-byte unless the user asks
+to revise that section. Do not persist a seed merely to ask questions.
 
 Before the first persistence, ask once in the main chat for permission to
-create and repeatedly update `CONVENTIONS.md` throughout this interview,
+create and repeatedly update `<workflow-root>/CONVENTIONS.md` throughout this interview,
 regardless of whether the root file already exists. That one approval covers
 later persistence after each reviewed answer. Use `overwrite: false` for the
 first write when the file is absent; after it exists, pass `overwrite: true`
@@ -88,7 +101,7 @@ succeeds.
 ### 4. Keep final review in the main chat
 
 Ask a short final review question listing filled and intentionally unfilled
-sections and pointing to `CONVENTIONS.md`. Never embed the file body or large
-markdown in the question. Apply requested changes in memory, delegate the next
-`write_conventions` with approved overwrite, and re-ask. The custom agent never
-conducts the interview or final review.
+sections and pointing to `<workflow-root>/CONVENTIONS.md`. Never embed the file
+body or large markdown in the question. Apply requested changes in memory,
+delegate the next `write_conventions` with approved overwrite, and re-ask. The
+custom agent never conducts the interview or final review.

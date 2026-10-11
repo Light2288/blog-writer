@@ -76,7 +76,7 @@ Ask it to extract topics, e.g. *"extract topics from last week"*. It:
    Overall score, and writes a DRAFT topics file to `inputs/topics-YYYY-MM-DD.md`
    (named by the run date — so same-week re-runs don't collide — with the ISO
    week, window, and a `Generated:` timestamp recorded inside). On your approval
-   it flips `Status: DRAFT` to `Status: FINAL`.
+   it flips the status table row from `DRAFT` to `FINAL`.
 
 It never writes an article itself.
 
@@ -87,25 +87,66 @@ subject. It reads `CONVENTIONS.md`, drafts the **English body first** and
 iterates with you, then translates to Italian and assembles a single
 bilingual `drafts/<slug>.mdx` with frontmatter `draft: true` and a stable
 `topic_key`. On your explicit *"publish &lt;slug&gt;"* command it flips
-`draft: false`, moves the file to `published/<slug>.mdx`, and records the
-`topic_key` in `inputs/published-topics.md` so the topic-extractor won't
-resurface it. It never edits source projects and never commits or pushes.
+`draft: false`, preserves the original `date`, refreshes `lastmod`, moves the
+file to `published/<slug>.mdx`, and records the `topic_key` in
+`inputs/published-topics.md` so the topic-extractor won't resurface it. It
+never edits source projects and never commits or pushes.
 
 ## Using Codex
 
-Start a trusted Codex chat in this repository and invoke the repository skills
-in ordinary language. For example:
+### Reliable command-scoped path
 
-- “Use `extract-topics` to find topics from last week.”
-- “Use `write-blog-article` to write about topic 2.”
-- “Use `author-conventions` to help me complete the writing conventions.”
+Install the bridge dependency, then run each reviewed workflow from the
+repository:
 
-The main chat owns project confirmation, review questions, and every approval.
-It delegates bounded work to `topic-extractor`, `blog-writer`, or
-`conventions-writer`. The main session and custom agents are read-only; all
-intended writes pass through one local MCP bridge whose `topic`, `writer`, and
-`conventions` profiles expose different fixed tool lists. The bridge has no
-general shell tool, arbitrary-path file tool, or caller-supplied project root.
+```bash
+npm install --prefix codex-bridge
+./bin/blog-writer-codex topics "last week"
+./bin/blog-writer-codex article "topic 2"
+```
+
+The topics command opens an interactive Codex session with only the `topic`
+bridge profile. Confirm the discovered projects, review the resulting
+topic list whose status table row is `DRAFT`, request any changes, and
+explicitly approve its finalization before starting the article command. Topic
+finalization does not start article writing.
+
+The article command opens a separate interactive session with only the
+`writer` profile. Review and approve the English draft first, then review the
+bilingual DRAFT and explicitly approve finalization.
+Article finalization does not publish. Publication remains a later, separate
+`publish <slug>` command that preserves `date`, refreshes `lastmod`, moves the
+article to `published/`, and updates the published-topic ledger.
+
+The launcher may execute bridge code and repository skills from a linked
+development worktree, but it resolves Git's primary checkout as the workflow
+data root. Consequently `CONVENTIONS.md`, `tracked-projects.txt`, `inputs/`,
+`drafts/`, and `published/` are always read from and written to the primary
+Blog-Writer checkout, matching the OpenCode workflow.
+
+The launcher uses the current configured model, `--no-daemon`, a read-only
+sandbox, and one fixed invocation-scoped bridge profile. It never derives MCP
+configuration from the supplied time window or subject. Missing `codex`,
+Node.js, the bridge entrypoint, or installed bridge dependencies produces a
+local prerequisite error. Invalid subcommands and a missing article subject
+print usage before Codex starts. Model or service failures keep Codex's exit
+status; the launcher never silently changes models.
+
+### Conditional custom-agent path
+
+An ordinary trusted Desktop or CLI chat can still invoke `extract-topics` or
+`write-blog-article` in natural language when that runtime correctly propagates
+the custom agent's MCP configuration. Current runtimes may omit those tools,
+which is why this path is conditional and the command-scoped launcher is the
+reliable path. The main chat still owns every question and approval; bounded
+work is delegated only to `topic-extractor`, `blog-writer`, or
+`conventions-writer`.
+
+The main session and custom agents remain read-only. All intended writes pass
+through one local MCP bridge whose `topic`, `writer`, and `conventions`
+profiles expose different fixed tool lists.
+The bridge has no general shell tool, arbitrary-path file tool, or
+caller-supplied project root.
 
 Codex topic extraction reads supported local rollout JSONL below
 `~/.codex/sessions/**/*.jsonl` through a bounded adapter and combines it with
@@ -150,6 +191,7 @@ bash tests/acceptance_check.sh        # step 05 system-wide static + coverage
 bash tests/permission_check.sh        # step 05 permission/destructive-command denial
 bash tests/redaction_check.sh         # step 05 deterministic redaction/flagging
 bash tests/codex_scaffold_check.sh    # Codex skills, agents, and read-only config
+bash tests/codex_launcher_check.sh    # command validation and fixed MCP argv
 npm test --prefix codex-bridge        # synthetic bridge unit/integration tests
 bash tests/codex_acceptance_check.sh  # cross-runtime deterministic acceptance
 ```
@@ -162,9 +204,11 @@ and never invokes a model. The live Codex verifier is separate and opt-in:
 CODEX_ACCEPTANCE_RUNTIME=1 bash tests/codex_live_check.sh
 ```
 
-It consumes model calls. Its write and boundary probes run only in a temporary
-fixture project with an isolated `CODEX_HOME`; the default command without the
-environment variable reports `SKIP` and exits successfully.
+It consumes model calls. Its command-scoped topic and writer probes are the
+acceptance gate; custom-agent propagation is reported separately as diagnostic
+evidence. All write and boundary probes run only in a temporary fixture project
+with an isolated `CODEX_HOME`; the default command without the environment
+variable reports `SKIP` and exits successfully.
 
 The permission-boundary and destructive-command scenarios can additionally be
 proven against the live runtime (opt-in, consumes model calls):
