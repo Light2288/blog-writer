@@ -114,13 +114,14 @@ The security concern is broader parent-session exposure of existing privileged o
 
 **Files:** `README.md`, `AGENTS.md`, `docs/acceptance.md`, `docs/architecture/map.md`, and documentation checks.
 
-- [ ] Update documentation assertions for desktop setup, direct invocation, narrow CLI compatibility, troubleshooting, and verification limits.
-- [ ] Document dependency installation, project trust, restart, catalog inspection, and supported prompts. Explain that explicit publication updates the ledger; manual moves do not.
-- [ ] Refresh the architecture map to include both runtimes, bridge profiles, primary-checkout data resolution, and current test topology.
-- [ ] Run `bash tests/run_all.sh`; expect `SUITE PASSED`. Confirm the implementation diff contains no OpenCode or real workflow-data changes.
+- [x] Update documentation assertions for desktop setup, direct invocation, narrow CLI compatibility, troubleshooting, and verification limits.
+- [x] Document dependency installation, project trust, restart, catalog inspection, and supported prompts. Explain that explicit publication updates the ledger; manual moves do not.
+- [x] Refresh the architecture map to include both runtimes, bridge profiles, primary-checkout data resolution, and current test topology.
+- [x] Run `bash tests/run_all.sh`; expect `SUITE PASSED`. Confirm the implementation diff contains no OpenCode or real workflow-data changes.
 - [ ] Perform independent specification review followed by quality review using `personal-workflows:code-review`. Address findings and rerun affected checks.
-- [ ] Commit as `docs: document direct Codex desktop workflows`.
+- [x] Commit as `docs: document direct Codex desktop workflows`.
 - [ ] Report commits, verification results, and any outstanding desktop smoke check. After a desktop restart, confirm the nine tools and a reviewed fixture operation in an ordinary project chat before claiming desktop verification.
+
 
 ## Acceptance Traceability
 

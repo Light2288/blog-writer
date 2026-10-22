@@ -4,9 +4,13 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
+
+# Imported probe helpers must not leave untracked bytecode in the checkout.
+sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parent.parent
 LIVE_CHECK = ROOT / "tests" / "codex_live_check.sh"

@@ -5,7 +5,7 @@ project against every acceptance criterion in
 [`specs/blog-writer-project.md`](../specs/blog-writer-project.md), as decomposed
 by [`specs/steps/05-end-to-end-acceptance.md`](../specs/steps/05-end-to-end-acceptance.md).
 
-It covers both OpenCode and Codex in three layers:
+It covers both OpenCode and Codex in four layers:
 
 - **Automated deterministic checks** — shell scripts plus the bridge's Node
   tests. They assert both runtime scaffolds, shared formats, permission and
@@ -13,9 +13,10 @@ It covers both OpenCode and Codex in three layers:
   run with no model, network, or real Codex-history access.
 - **OpenCode runtime scenarios** — agent conversations that require a running
   OpenCode session.
-- **An opt-in live Codex verifier** — isolated skill, custom-agent, MCP, and
-  read-only sandbox probes that consume model calls only when explicitly
-  enabled.
+- **An opt-in live Codex verifier** — app-server, structured skill, MCP, and
+  read-only sandbox probes that consume model calls only when explicitly enabled.
+- **A desktop restart and smoke test** — actual catalog inspection and a reviewed
+  fixture operation in an ordinary project chat.
 
 Where full automation is impractical (agent conversations), the manual script
 below documents the exact observation to look for. The mechanical checks cover
@@ -54,7 +55,7 @@ everything statically verifiable.
   `.opencode/opencode.json`, the agents, and the skills are loaded.
 - For Codex runtime scenarios, trust this project in Codex CLI or Codex
   desktop, then **restart Codex** after changing `.codex/config.toml`,
-  `.codex/agents/`, or `.agents/skills/`.
+  or `.agents/skills/`. Node.js must be on the desktop app’s `PATH`.
 
 Codex history is read through a bounded rollout adapter below
 `~/.codex/sessions/**/*.jsonl`. This path and its JSONL record shape are local
@@ -62,11 +63,14 @@ adapter details, not a stable public database contract. The deterministic
 suite substitutes synthetic rollouts and never reads that path. Internal Codex
 SQLite, ChatGPT web history, and hosted account history are out of scope.
 
-The main Codex chat has no privileged bridge registration. Each read-only
-custom agent starts only its matching `topic`, `conventions`, or `writer`
-profile. The bridge exposes no general shell tool, arbitrary-path file tool,
-or caller-supplied project root; its mutation operations validate fixed
-project-relative targets.
+The main Codex chat has one project-scoped `desktop` bridge registration with
+exactly nine existing bounded operations. All three skills call it directly;
+there are no project custom agents. The CLI launcher replaces the canonical
+registration with exactly the selected narrow `topic` or `writer` catalog. The
+`conventions`-only profile remains available. The bridge exposes no general shell tool,
+arbitrary-path file tool, or caller-supplied project root; mutation operations
+validate fixed project-relative targets. Linked worktrees supply code while the
+Git primary checkout supplies conventions, inputs, drafts, and published files.
 
 ## Automated checks
 
@@ -87,10 +91,12 @@ Or run each verifier individually:
 | `tests/acceptance_check.sh` | Step 05 system-wide static checks (fresh-clone readiness, DRAFT-first markers, bilingual + MDX vocabulary, read-only SQL, and this doc's scenario/verifier coverage). |
 | `tests/permission_check.sh` | Step 05 permission boundary & destructive-command denial (config-level always; live runtime opt-in via `ACCEPTANCE_RUNTIME=1`). |
 | `tests/redaction_check.sh` | Step 05 deterministic redaction/flagging using fixtures (no live DB). |
-| `tests/codex_scaffold_check.sh` | Codex skill discovery anchors, custom-agent profile isolation, and read-only project configuration. |
+| `tests/codex_scaffold_check.sh` | Codex skill discovery anchors, direct desktop routing, exact catalogs, and read-only project configuration. |
 | `tests/codex_launcher_check.sh` | Command usage, prerequisite failures, exact fixed-profile argv, prompt-data isolation, and exit propagation using a fake Codex executable. |
 | `npm test --prefix codex-bridge` | Bridge unit/integration behavior using synthetic rollout and temporary Git/project fixtures. |
 | `tests/codex_acceptance_check.sh` | Cross-runtime AC-01 through AC-19 static/deterministic anchors and documentation contracts. |
+| `tests/codex_live_events_check.py` | Offline adversarial protocol fixtures: exact catalogs and arguments, same parent/turn, successful results, no child/split ownership or prose-only evidence. |
+| `tests/codex_runtime_probe.py` | App-server JSON-RPC driver and strict parent evidence verifier used by the opt-in harness. |
 | `tests/codex_live_check.sh` | Opt-in live Codex checks; defaults to `SKIP` and is never called by `run_all.sh`. |
 
 Every script prints `PASS:` / `FAIL:` / `SKIP:` lines and exits non-zero on any
@@ -122,17 +128,63 @@ CODEX_ACCEPTANCE_RUNTIME=1 bash tests/codex_live_check.sh
 ```
 
 When the variable is unset, the script prints `SKIP` and exits 0. When enabled,
-it creates a temporary trusted fixture project and isolated `CODEX_HOME`, copies
-only authentication material needed for the invocation, and provides synthetic
-rollout history. Its acceptance gate launches main-session topic and writer
-probes with `--no-daemon`, a read-only sandbox, and exactly one invocation-scoped
-bridge profile. Structured events must prove the expected main-session tool
-call, exact arguments, exact profile catalog, fixture effect, and absence of a
-cross-role effect. Custom-agent MCP propagation remains diagnostic: it reports
-PASS when the runtime propagates the child configuration and a non-gating SKIP
-when the known upstream limitation is present. A demonstrated cross-role call
-or out-of-fixture effect still fails. The verifier never uses the real rollout
-store for a write or destructive-boundary probe.
+it creates a temporary trusted fixture project and isolated `CODEX_HOME` and
+`HOME`, copies only authentication material needed for the invocation, and
+provides synthetic rollout history. The app-server helper records JSON-RPC
+requests, responses, and notifications. It loads desktop project configuration
+without MCP overrides, reads the actual catalog, and invokes each of the three
+skills with structured skill input on **one parent thread**.
+
+Each operation must have an acknowledged skill request, exact arguments, a
+successful completed MCP result on the same parent and turn, and exact resulting
+fixture bytes. A catalog must be a correlated response with the exact expected
+surface. Partial/extra catalogs, unknown tools, child ownership, split sessions,
+failed/missing results, and assistant claims cannot establish success. The
+fixture client approves only the exact preauthorized fixture call; no persistent
+approval or production setting is changed. These supplied-content probes verify
+transport and persistence rather than the full editorial interview.
+
+Separate topic/writer probes use the launcher's exact override values and
+require their narrow catalogs. A direct `command/exec` RPC inherits the project's
+sandbox without an override and must produce an actual failed write plus an
+absent target file. All effects remain in disposable fixtures. A DRAFT operation
+must not publish or touch the ledger. SDK tests separately verify finalization,
+publication, duplicate prevention, collision checks, and rollback.
+
+Successful supported evidence exits 0; observed violations exit 1. Missing
+authentication or unsupported/incomplete runtime evidence reports `NEEDS_CONTEXT`
+and exits 2. No live result establishes desktop UI behavior by itself.
+
+### Desktop restart and smoke test
+
+1. Install dependencies, trust the project, restart Codex, and open an ordinary
+   project chat without launcher overrides.
+2. Inspect `blog_writer_bridge`: require exactly `discover_projects`,
+   `collect_activity`, `write_topic_draft`, `finalize_topics`, `write_conventions`,
+   `read_source_file`, `write_article_draft`, `finalize_article`, and
+   `publish_article`. Unrelated MCP servers are ignored.
+3. In a disposable fixture checkout, use the three skills in the same chat:
+
+   ```text
+   Use extract-topics to find topics from last week.
+   Use author-conventions to update my writing conventions.
+   Use write-blog-article to draft topic 1 from inputs/topics-YYYY-MM-DD.md.
+   ```
+
+4. Confirm source projects before collection, complete the interview, and inspect
+   a persisted DRAFT before approving it. Approve English before translation,
+   then review the bilingual DRAFT before explicit finalization. Article
+   finalization does not publish. Only a separate `publish <slug>` instruction
+   authorizes the move and `inputs/published-topics.md` update. Manual file moves
+   do not update that ledger.
+5. Record the app version, catalog, reviewed operation, actual tool result, and
+   resulting fixture file. If no restart or reviewed operation was observed,
+   report the desktop smoke test as outstanding even when automated checks pass.
+
+If startup fails, check Node.js 20+ on the app's `PATH`, installed bridge
+dependencies, project trust, and MCP startup errors, then restart. Missing,
+partial, extra, or mode-mismatched catalogs must stop before workflow calls.
+Do not replace bridge operations with shell, filesystem, or custom-agent calls.
 
 ### Reliable Codex workflow smoke test
 
@@ -159,21 +211,13 @@ later explicit `publish <slug>` instruction authorizes publication.
 The launcher fails locally with usage or a prerequisite message for an unknown
 subcommand, missing article subject, missing `codex`/Node.js, missing bridge
 entrypoint, or missing bridge dependencies. It propagates Codex model/service
-failures without selecting a different model. The ordinary Desktop/custom-agent
-path remains available only when that runtime propagates the custom agent's MCP
-configuration correctly.
+failures without selecting a different model. The launcher uses `--no-daemon`;
+the desktop path uses the project registration directly.
 
 ## OpenCode manual runtime script
 
 Restart OpenCode, then walk these scenarios inside the project. For each, send
 the prompt and confirm the expected observation.
-
-For a conditional custom-agent smoke test in a trusted project chat, use “Use
-`extract-topics` to find topics from last week”, “Use `write-blog-article` to
-write about topic 2”, or “Use `author-conventions` to complete the writing
-conventions”. This is diagnostic on runtimes that do not propagate child MCP
-configuration. When supported, the main chat must keep the review questions and
-approvals while delegating only bounded operations to the matching custom agent.
 
 ### Scenario 1 — Fresh-clone readiness
 

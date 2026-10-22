@@ -386,7 +386,19 @@ for doc in README.md docs/acceptance.md; do
     "$doc documents direct desktop invocation"
   assert_contains_ci "$doc" 'does not publish' \
     "$doc keeps finalization separate from publication"
+  assert_contains "$doc" 'Use extract-topics to find topics from last week.' \
+    "$doc provides a direct desktop prompt"
+  assert_contains "$doc" 'nine' "$doc documents the desktop catalog size"
+  assert_contains_ci "$doc" 'manual file moves' "$doc explains manual publication bookkeeping"
+  assert_contains_ci "$doc" 'desktop restart and smoke test' \
+    "$doc distinguishes desktop verification from app-server evidence"
+  assert_absent "$doc" 'Conditional custom-agent' "$doc removes obsolete fallback guidance"
 done
+
+assert_contains AGENTS.md 'desktop' "project instructions describe desktop bridge routing"
+assert_absent AGENTS.md 'registers no privileged MCP bridge' "project instructions remove obsolete registration claim"
+assert_contains docs/architecture/map.md 'codex-bridge/src/server.mjs' "architecture map includes bridge entrypoint"
+assert_contains docs/architecture/map.md 'tests/codex_runtime_probe.py' "architecture map includes runtime verifier"
 
 echo
 if [ "$FAIL" -eq 0 ]; then
