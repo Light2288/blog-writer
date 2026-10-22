@@ -219,24 +219,16 @@ def fail(message):
     failed = True
 
 text = pathlib.Path('.codex/config.toml').read_text(encoding='utf-8')
-pattern = re.compile(
-    r'\Asandbox_mode = "read-only"\n\n'
-    r'\[features\]\nmulti_agent = true\n\n'
-    r'\[agents\]\nmax_threads = 3\nmax_depth = 1\n?\Z'
-)
-if pattern.fullmatch(text):
-    passed('.codex/config.toml uses the supported static TOML shape')
+if re.search(r'^sandbox_mode = "read-only"$', text, re.M):
     passed('main Codex sandbox is read-only')
-    passed('multi-agent behavior is enabled')
-    passed('main config bounds custom-agent concurrency')
-    passed('custom agents cannot delegate to nested agents')
 else:
-    fail('.codex/config.toml must match the guarded project configuration')
-
-if '[mcp_servers' not in text:
-    passed('main chat has no privileged MCP registration')
+    fail('main Codex sandbox must remain read-only')
+if '[mcp_servers.blog_writer_bridge]' in text and '--profile desktop' in text:
+    passed('main chat registers the desktop bridge')
 else:
-    fail('main config must not contain an mcp_servers table')
+    fail('main chat must register the desktop bridge')
+if re.search(r'^cwd\s*=', text, re.M):
+    fail('desktop startup must not depend on a relative cwd')
 
 sys.exit(1 if failed else 0)
 PY

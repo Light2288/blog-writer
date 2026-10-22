@@ -288,3 +288,37 @@ test('desktop_reuses_narrow_schemas_and_bounded_workflow_operations', async () =
     await rm(scratch, {recursive:true, force:true});
   }
 });
+
+test('project_bootstrap_handles_nested_spaces_and_linked_worktree_roots', async () => {
+  const codeRoot = fileURLToPath(new URL('../../', import.meta.url));
+  const config = await readFile(join(codeRoot, '.codex/config.toml'), 'utf8');
+  const commandMatch = config.match(/^command = (".*")$/m);
+  const argsMatch = config.match(/^args = (\[.*\])$/m);
+  assert.ok(commandMatch && argsMatch, 'project must register a desktop MCP command');
+  const command = JSON.parse(commandMatch[1]);
+  const args = JSON.parse(argsMatch[1]);
+  const scratch = await mkdtemp(join(tmpdir(), 'desktop bootstrap '));
+  const primary = join(scratch, 'primary checkout');
+  const worktree = join(scratch, 'linked checkout');
+  try {
+    await run('git', ['init', '--quiet', primary]);
+    await mkdir(join(primary, 'nested'));
+    await symlink(join(codeRoot,'codex-bridge'),join(primary,'codex-bridge'));
+    await run('git', ['-C', primary, 'add', 'codex-bridge']);
+    await run('git', ['-C', primary, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-m', 'fixture']);
+    await run('git', ['-C', primary, 'worktree', 'add', '--quiet', '-b', 'fixture', worktree]);
+    for (const cwd of [primary, join(primary,'nested'), worktree]) {
+      const client = new Client({name:'bootstrap-test',version:'1'});
+      try {
+        await client.connect(new StdioClientTransport({command, args, cwd, stderr:'pipe'}));
+        assert.deepEqual((await client.listTools()).tools.map(t=>t.name), EXPECTED_PROFILE_TOOL_NAMES.desktop);
+        if (cwd === worktree) {
+          const result = await client.callTool({name:'write_conventions', arguments:{content:'# Primary conventions\n',overwrite:false}});
+          assert.notEqual(result.isError,true);
+          assert.equal(await readFile(join(primary,'CONVENTIONS.md'),'utf8'),'# Primary conventions\n');
+          await assert.rejects(readFile(join(worktree,'CONVENTIONS.md')),{code:'ENOENT'});
+        }
+      } finally {await client.close();}
+    }
+  } finally {await rm(scratch,{recursive:true,force:true});}
+});
