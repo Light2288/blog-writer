@@ -98,15 +98,15 @@ The security concern is broader parent-session exposure of existing privileged o
 
 **Interfaces:** Preserve the opt-in runtime command and existing success/failure/`NEEDS_CONTEXT` distinction. The new helper drives app-server JSON-RPC and records requests, responses, and notifications for verification.
 
-- [ ] Add failing event fixtures for desktop mode, all three workflows on one parent, narrow-profile isolation, and adversarial evidence. Preserve rejection of wrong arguments, failed or missing results, unknown tools, child ownership, split sessions, and assistant claims.
-- [ ] Run `python3 tests/codex_live_events_check.py`; expect failures for unsupported desktop/protocol cases.
-- [ ] Implement app-server probing using `initialize`, `thread/start`, `mcpServerStatus/list`, and `turn/start`. Desktop probing loads the trusted fixture project configuration without MCP overrides. Invoke each skill using explicit structured skill input.
-- [ ] Correlate the catalog response with its request and parent thread. Correlate skill requests, completed MCP calls, exact arguments, successful results, and resulting fixture bytes. All three workflow probes identify the same parent.
-- [ ] Retain narrow runtime probes using the launcher's override values. Remove obsolete custom-agent probes. Correct `--no-daemon` placement wherever CLI execution remains.
-- [ ] Preserve isolated `CODEX_HOME`, synthetic history, disposable workflow files, bounded waits, process cleanup, and the direct-write sandbox probe.
-- [ ] Run `python3 tests/codex_live_events_check.py` and `bash tests/codex_acceptance_check.sh`; expect deterministic checks to pass.
-- [ ] Run `CODEX_ACCEPTANCE_RUNTIME=1 bash tests/codex_live_check.sh`. Require tool and file evidence for success. Report unavailable authentication or unsupported runtime evidence as incomplete verification.
-- [ ] Commit as `test: verify direct desktop workflow execution`.
+- [x] Add failing event fixtures for desktop mode, all three workflows on one parent, narrow-profile isolation, and adversarial evidence. Preserve rejection of wrong arguments, failed or missing results, unknown tools, child ownership, split sessions, and assistant claims.
+- [x] Run `python3 tests/codex_live_events_check.py`; expect failures for unsupported desktop/protocol cases.
+- [x] Implement app-server probing using `initialize`, `thread/start`, `mcpServerStatus/list`, and `turn/start`. Desktop probing loads the trusted fixture project configuration without MCP overrides. Invoke each skill using explicit structured skill input.
+- [x] Correlate the catalog response with its request and parent thread. Correlate skill requests, completed MCP calls, exact arguments, successful results, and resulting fixture bytes. All three workflow probes identify the same parent.
+- [x] Retain narrow runtime probes using the launcher's override values. Remove obsolete custom-agent probes. Correct `--no-daemon` placement wherever CLI execution remains.
+- [x] Preserve isolated `CODEX_HOME`, synthetic history, disposable workflow files, bounded waits, process cleanup, and the direct-write sandbox probe.
+- [x] Run `python3 tests/codex_live_events_check.py` and `bash tests/codex_acceptance_check.sh`; expect deterministic checks to pass.
+- [x] Run `CODEX_ACCEPTANCE_RUNTIME=1 bash tests/codex_live_check.sh`. Require tool and file evidence for success. Report unavailable authentication or unsupported runtime evidence as incomplete verification.
+- [x] Commit as `test: verify direct desktop workflow execution`.
 
 ### Task 5: Document, review, and finish [size: M | risk: none | mechanical: false | clear_pattern: true | objectively_verifiable: true | concerns: none]
 
