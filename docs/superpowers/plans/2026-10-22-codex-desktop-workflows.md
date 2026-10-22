@@ -52,12 +52,12 @@ Verification commands below come from the existing README, package scripts, and 
 
 The security concern is broader parent-session exposure of existing privileged operations.
 
-- [ ] Add failing tests asserting that desktop contains exactly `discover_projects`, `collect_activity`, `write_topic_draft`, `finalize_topics`, `write_conventions`, `read_source_file`, `write_article_draft`, `finalize_article`, `publish_article`. Assert narrow catalogs remain unchanged, unknown profiles fail, and arbitrary handlers are never registered.
-- [ ] Run `npm test --prefix codex-bridge`; confirm failures identify missing desktop support.
-- [ ] Add the frozen desktop catalog and compose the three existing handler factories in `createProfileHandlers`. Update profile types and error messages. Introduce no new workflow operations.
-- [ ] Add SDK tests comparing desktop tool schemas with their narrow-profile equivalents. Exercise topic persistence, conventions persistence, source reads, article drafting, finalization, and publication using disposable fixture data. Confirm finalization leaves the ledger untouched and publication records the topic once.
-- [ ] Run `npm test --prefix codex-bridge`; expect all tests to pass, including existing path, history, redaction, collision, and rollback coverage.
-- [ ] Commit as `feat: add bounded desktop bridge profile`.
+- [x] Add failing tests asserting that desktop contains exactly `discover_projects`, `collect_activity`, `write_topic_draft`, `finalize_topics`, `write_conventions`, `read_source_file`, `write_article_draft`, `finalize_article`, `publish_article`. Assert narrow catalogs remain unchanged, unknown profiles fail, and arbitrary handlers are never registered.
+- [x] Run `npm test --prefix codex-bridge`; confirm failures identify missing desktop support.
+- [x] Add the frozen desktop catalog and compose the three existing handler factories in `createProfileHandlers`. Update profile types and error messages. Introduce no new workflow operations.
+- [x] Add SDK tests comparing desktop tool schemas with their narrow-profile equivalents. Exercise topic persistence, conventions persistence, source reads, article drafting, finalization, and publication using disposable fixture data. Confirm finalization leaves the ledger untouched and publication records the topic once.
+- [x] Run `npm test --prefix codex-bridge`; expect all tests to pass, including existing path, history, redaction, collision, and rollback coverage.
+- [x] Commit as `feat: add bounded desktop bridge profile`.
 
 ### Task 2: Register portable desktop startup and preserve the launcher [size: M | risk: security | mechanical: false | clear_pattern: true | objectively_verifiable: true | concerns: security]
 
@@ -67,12 +67,12 @@ The security concern is broader parent-session exposure of existing privileged o
 
 **Interfaces:** Ordinary chats receive `blog_writer_bridge` with profile `desktop`; `topics` and `article` retain their existing interfaces and exact narrow profiles.
 
-- [ ] Add failing checks for parent registration, startup from nested directories and checkout paths containing spaces, linked-worktree data routing, and narrow launcher overrides.
-- [ ] Run `bash tests/codex_scaffold_check.sh`, `bash tests/codex_launcher_check.sh`, and `npm test --prefix codex-bridge`; confirm the new assertions fail.
-- [ ] Keep `sandbox_mode = "read-only"` and register the desktop server with `/bin/sh` and fixed startup arguments: `set -eu; bridge_code_root=$(git rev-parse --show-toplevel); exec node "$bridge_code_root/codex-bridge/src/server.mjs" --profile desktop`. Leave MCP `cwd` unset. This startup mechanism was verified from nested directories and paths containing spaces. It exposes no shell tool.
-- [ ] Preserve launcher overrides of the canonical server's `command` and complete `args` array. Retain prerequisite errors, user-text handling, working-directory selection, and exit propagation.
-- [ ] Repeat the three checks; expect startup and launcher tests to pass. Any remaining scaffold failures must concern the skill contracts addressed by Task 3.
-- [ ] Commit as `feat: register desktop bridge in project configuration`.
+- [x] Add failing checks for parent registration, startup from nested directories and checkout paths containing spaces, linked-worktree data routing, and narrow launcher overrides.
+- [x] Run `bash tests/codex_scaffold_check.sh`, `bash tests/codex_launcher_check.sh`, and `npm test --prefix codex-bridge`; confirm the new assertions fail.
+- [x] Keep `sandbox_mode = "read-only"` and register the desktop server with `/bin/sh` and fixed startup arguments: `set -eu; bridge_code_root=$(git rev-parse --show-toplevel); exec node "$bridge_code_root/codex-bridge/src/server.mjs" --profile desktop`. Leave MCP `cwd` unset. This startup mechanism was verified from nested directories and paths containing spaces. It exposes no shell tool.
+- [x] Preserve launcher overrides of the canonical server's `command` and complete `args` array. Retain prerequisite errors, user-text handling, working-directory selection, and exit propagation.
+- [x] Repeat the three checks; expect startup and launcher tests to pass. Any remaining scaffold failures must concern the skill contracts addressed by Task 3.
+- [x] Commit as `feat: register desktop bridge in project configuration`.
 
 ### Task 3: Route all skills directly through the main chat [size: M | risk: security | mechanical: false | clear_pattern: true | objectively_verifiable: true | concerns: security]
 
@@ -82,13 +82,13 @@ The security concern is broader parent-session exposure of existing privileged o
 
 **Interfaces:** All bridge calls originate in the main chat. Desktop mode requires exactly nine tools; explicitly selected command mode requires the selected workflow's exact narrow catalog.
 
-- [ ] Update scaffold assertions to require direct routing and reject obsolete delegation. Cover missing, partial, unexpected, and mismatched catalogs, including unrelated MCP servers that must be ignored.
-- [ ] Run `bash tests/codex_scaffold_check.sh`; expect failures against the old skills.
-- [ ] Update all three skills, applying the skill-editing guidance. Preserve existing workflow steps, approval gates, overwrite requirements, and primary-checkout artifact resolution.
-- [ ] Add prerequisite and restart guidance for invalid catalogs. Retain the prohibition on shell or filesystem substitutes for bridge operations.
-- [ ] Remove the three project custom-agent definitions and project settings used only for them. Remove custom-agent fallback instructions.
-- [ ] Run `bash tests/codex_scaffold_check.sh` and `bash tests/codex_launcher_check.sh`; expect both to pass.
-- [ ] Commit as `refactor: run Codex workflows directly in the main chat`.
+- [x] Update scaffold assertions to require direct routing and reject obsolete delegation. Cover missing, partial, unexpected, and mismatched catalogs, including unrelated MCP servers that must be ignored.
+- [x] Run `bash tests/codex_scaffold_check.sh`; expect failures against the old skills.
+- [x] Update all three skills, applying the skill-editing guidance. Preserve existing workflow steps, approval gates, overwrite requirements, and primary-checkout artifact resolution.
+- [x] Add prerequisite and restart guidance for invalid catalogs. Retain the prohibition on shell or filesystem substitutes for bridge operations.
+- [x] Remove the three project custom-agent definitions and project settings used only for them. Remove custom-agent fallback instructions.
+- [x] Run `bash tests/codex_scaffold_check.sh` and `bash tests/codex_launcher_check.sh`; expect both to pass.
+- [x] Commit as `refactor: run Codex workflows directly in the main chat`.
 
 ### Task 4: Verify real parent-session configuration and operations [size: L | risk: security | mechanical: false | clear_pattern: false | objectively_verifiable: true | concerns: security]
 

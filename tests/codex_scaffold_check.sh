@@ -62,19 +62,15 @@ check_skill() {
     fail "$name skill metadata description is not exact"
   fi
 
-  assert_contains "$path" "Delegate only to \`$agent\`" \
-    "$name delegates only to $agent"
   assert_contains "$path" "The main chat owns every user question" \
     "$name keeps user questions in the main chat"
-  assert_contains "$path" "Never ask a custom agent to question the user" \
-    "$name forbids delegated user questions"
+  assert_contains "$path" "### Desktop mode" "$name supports desktop execution"
+  assert_contains "$path" "exactly these nine" "$name validates the complete desktop catalog"
+  assert_contains "$path" "Missing, partial, or unexpected" "$name rejects invalid catalogs"
+  assert_contains "$path" "Unrelated MCP servers" "$name scopes catalog validation"
+  assert_contains "$path" "Never use shell or general filesystem tools" "$name forbids bridge bypasses"
+  assert_absent "$path" "Delegate only to" "$name has no agent fallback"
 
-  for other in topic-extractor blog-writer conventions-writer; do
-    if [ "$other" != "$agent" ]; then
-      assert_absent "$path" "Delegate only to \`$other\`" \
-        "$name does not route to $other"
-    fi
-  done
 }
 
 echo "== Codex skill discovery and routing =="
@@ -149,198 +145,34 @@ assert_absent "$WRITER_SKILL" "previously dated or published article" \
 assert_contains "$WRITER_SKILL" "Never invent components outside this set" \
   "article skill preserves the controlled MDX vocabulary"
 
-echo "== Codex command-scoped and custom-agent modes =="
+echo "== Codex direct execution modes =="
 for skill in "$TOPIC_SKILL" "$WRITER_SKILL"; do
-  assert_contains "$skill" "## Execution modes" \
-    "$skill defines mutually exclusive execution modes"
-  assert_contains "$skill" "### Command-scoped mode" \
-    "$skill documents direct main-session execution"
-  assert_contains "$skill" "### Custom-agent mode" \
-    "$skill preserves custom-agent fallback"
-  assert_contains "$skill" "partial matching surface" \
-    "$skill stops on a partial bridge surface"
-  assert_contains "$skill" "cross-role bridge tool" \
-    "$skill stops on cross-role bridge exposure"
-  assert_contains "$skill" \
-    'falls outside the exact four-tool' \
-    "$skill stops on every bridge tool outside its exact allowlist"
-  assert_contains "$skill" "Never use shell or general filesystem tools" \
-    "$skill forbids mutation bypasses"
+  assert_contains "$skill" "### Command-scoped mode" "$skill retains narrow command mode"
+  assert_contains "$skill" "explicitly selected" "$skill requires explicit narrow-mode selection"
+  assert_contains "$skill" "exact four-tool" "$skill rejects wider catalogs in command mode"
 done
+assert_contains "$CONVENTIONS_SKILL" "### Conventions-only mode" "conventions retains its narrow profile"
 
-assert_contains "$TOPIC_SKILL" \
-  '`discover_projects`, `collect_activity`, `write_topic_draft`, and `finalize_topics`' \
-  "topic command mode requires the exact topic tool surface"
-assert_contains "$TOPIC_SKILL" \
-  'Do not delegate to `topic-extractor` in command-scoped mode.' \
-  "topic command mode forbids custom-agent delegation"
-assert_contains "$TOPIC_SKILL" \
-  'No `blog_writer_bridge` tool is visible' \
-  "topic custom-agent mode requires an absent main bridge surface"
-for cross_role in write_conventions read_source_file write_article_draft finalize_article publish_article; do
-  assert_contains "$TOPIC_SKILL" "\`$cross_role\`" \
-    "topic mode names cross-role tool $cross_role"
-done
-
-assert_contains "$WRITER_SKILL" \
-  '`read_source_file`, `write_article_draft`, `finalize_article`, and `publish_article`' \
-  "writer command mode requires the exact writer tool surface"
-assert_contains "$WRITER_SKILL" \
-  'Do not delegate to `blog-writer` in command-scoped mode.' \
-  "writer command mode forbids custom-agent delegation"
-assert_contains "$WRITER_SKILL" \
-  'No `blog_writer_bridge` tool is visible' \
-  "writer custom-agent mode requires an absent main bridge surface"
-for cross_role in discover_projects collect_activity write_topic_draft finalize_topics write_conventions; do
-  assert_contains "$WRITER_SKILL" "\`$cross_role\`" \
-    "writer mode names cross-role tool $cross_role"
-done
-
-echo "== Codex project and custom-agent configuration =="
-assert_file .codex/config.toml
-assert_file .codex/agents/topic-extractor.toml
-assert_file .codex/agents/blog-writer.toml
-assert_file .codex/agents/conventions-writer.toml
-
-if [ -f .codex/config.toml ]; then
-  python3 - <<'PY'
+echo "== Codex project configuration =="
+python3 - <<'PYCHECK'
+import json
 import pathlib
 import re
-import sys
-
-failed = False
-
-def passed(message):
-    print(f"PASS: {message}")
-
-def fail(message):
-    global failed
-    print(f"FAIL: {message}")
-    failed = True
-
-text = pathlib.Path('.codex/config.toml').read_text(encoding='utf-8')
-if re.search(r'^sandbox_mode = "read-only"$', text, re.M):
-    passed('main Codex sandbox is read-only')
-else:
-    fail('main Codex sandbox must remain read-only')
-if '[mcp_servers.blog_writer_bridge]' in text and '--profile desktop' in text:
-    passed('main chat registers the desktop bridge')
-else:
-    fail('main chat must register the desktop bridge')
-if re.search(r'^cwd\s*=', text, re.M):
-    fail('desktop startup must not depend on a relative cwd')
-
-sys.exit(1 if failed else 0)
-PY
-  if [ $? -ne 0 ]; then FAIL=1; fi
-fi
-
-python3 - <<'PY'
-import ast
-import pathlib
-import re
-import sys
-
-expected = {
-    'topic-extractor': {
-        'description': 'Analyzes bounded Codex and Git activity and persists reviewed topic files through the topic bridge profile.',
-        'profile': 'topic',
-    },
-    'blog-writer': {
-        'description': 'Fact-checks approved sources and performs scoped article draft, finalization, and publication operations.',
-        'profile': 'writer',
-    },
-    'conventions-writer': {
-        'description': 'Persists approved writing conventions through the conventions bridge profile.',
-        'profile': 'conventions',
-    },
-}
-failed = False
-
-def passed(message):
-    print(f"PASS: {message}")
-
-def fail(message):
-    global failed
-    print(f"FAIL: {message}")
-    failed = True
-
-for role, wanted in expected.items():
-    path = pathlib.Path('.codex/agents') / f'{role}.toml'
-    if not path.is_file():
-        continue
-    text = path.read_text(encoding='utf-8')
-    match = re.fullmatch(
-        r'name = "(?P<name>[^"\n]+)"\n'
-        r'description = "(?P<description>[^"\n]+)"\n'
-        r'developer_instructions = """\n(?P<instructions>.*?)\n"""\n'
-        r'sandbox_mode = "(?P<sandbox>[^"\n]+)"\n\n'
-        r'\[mcp_servers\.(?P<server>[^\]\n]+)\]\n'
-        r'command = "(?P<command>[^"\n]+)"\n'
-        r'args = (?P<args>\[[^\n]+\])\n?',
-        text,
-        flags=re.DOTALL,
-    )
-    if match is None:
-        fail(f'{path} does not use the supported static TOML shape')
-        continue
-    passed(f'{path} uses the supported static TOML shape')
-
-    if match.group('name') == role:
-        passed(f'{role} has the exact name')
-    else:
-        fail(f'{role} must declare name = {role!r}')
-
-    if match.group('description') == wanted['description']:
-        passed(f'{role} has the exact description')
-    else:
-        fail(f'{role} description is not exact')
-
-    instructions = match.group('instructions')
-    if instructions.strip():
-        passed(f'{role} has developer instructions')
-        for required in (
-            'Never ask the user questions',
-            'Return a concise structured result to the parent',
-        ):
-            if required in instructions:
-                passed(f'{role} instructions include: {required}')
-            else:
-                fail(f'{role} instructions missing: {required}')
-    else:
-        fail(f'{role} must have non-empty developer_instructions')
-
-    if match.group('sandbox') == 'read-only':
-        passed(f'{role} sandbox is read-only')
-    else:
-        fail(f'{role} sandbox must be read-only')
-
-    if match.group('server') == 'blog_writer_bridge':
-        passed(f'{role} uses the canonical bridge registration name')
-    else:
-        fail(f'{role} must name its MCP registration blog_writer_bridge')
-
-    if match.group('command') == 'node':
-        passed(f'{role} starts the bridge with node')
-    else:
-        fail(f'{role} bridge command must be node')
-
-    wanted_args = [
-        'codex-bridge/src/server.mjs',
-        '--profile',
-        wanted['profile'],
-    ]
-    try:
-        actual_args = ast.literal_eval(match.group('args'))
-    except (SyntaxError, ValueError):
-        actual_args = None
-    if actual_args == wanted_args:
-        passed(f"{role} is isolated to the {wanted['profile']} profile")
-    else:
-        fail(f'{role} bridge args must be {wanted_args!r}')
-
-sys.exit(1 if failed else 0)
-PY
+p = pathlib.Path('.codex/config.toml')
+s = p.read_text()
+assert re.search(r'^sandbox_mode = "read-only"$', s, re.M)
+assert s.count('[mcp_servers.') == 1
+assert '[mcp_servers.blog_writer_bridge]' in s
+assert json.loads(re.search(r'^command = (".*")$', s, re.M)[1]) == '/bin/sh'
+assert json.loads(re.search(r'^args = (\[.*\])$', s, re.M)[1]) == [
+    '-c', 'set -eu; bridge_code_root=$(git rev-parse --show-toplevel); exec node "$bridge_code_root/codex-bridge/src/server.mjs" --profile desktop'
+]
+assert not re.search(r'^cwd\s*=', s, re.M)
+assert '[agents]' not in s and '[features]' not in s
+for role in ('topic-extractor', 'blog-writer', 'conventions-writer'):
+    assert not pathlib.Path(f'.codex/agents/{role}.toml').exists()
+print('PASS: parent desktop registration, fixed startup, read-only sandbox, and obsolete-agent removal')
+PYCHECK
 if [ $? -ne 0 ]; then FAIL=1; fi
 
 echo "== Runtime-neutral project guidance =="

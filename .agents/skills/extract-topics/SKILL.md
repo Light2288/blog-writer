@@ -12,42 +12,42 @@ output is `<workflow-root>/inputs/topics-YYYY-MM-DD.md`, written with one
 approval.
 
 The main chat owns every user question, project confirmation, overwrite choice,
-review, and approval. Never ask a custom agent to question the user.
+review, and approval. All workflow operations run directly in this chat.
 
 ## Execution modes
 
-Choose exactly one mode before resolving the time window. The launcher prompt
-selects command-scoped mode explicitly; tool visibility alone does not.
+Resolve the complete canonical bridge catalog before any workflow operation.
+Choose command-scoped mode only when explicitly selected by the launcher;
+otherwise choose desktop mode.
+
+### Desktop mode
+
+Use this mode in an ordinary project chat. The canonical `blog_writer_bridge`
+must expose exactly these nine operations:
+
+`discover_projects`, `collect_activity`, `write_topic_draft`, `finalize_topics`,
+`write_conventions`, `read_source_file`, `write_article_draft`,
+`finalize_article`, `publish_article`.
+
+Known operations for other workflows are valid members of this desktop catalog.
+Call only this skill's matching operations, directly from the main chat.
+Unrelated MCP servers are outside this catalog check.
 
 ### Command-scoped mode
 
-Use this mode only when the launcher selected it and the main session can call
-exactly these four bridge tools: `discover_projects`, `collect_activity`, `write_topic_draft`, and `finalize_topics`.
+Require the exact four-tool topic catalog: `discover_projects`,
+`collect_activity`, `write_topic_draft`, and `finalize_topics`. Reject every
+other bridge operation, including the wider desktop catalog, before any call.
+Call the matching operations directly from the main chat.
 
-Apply this decision order before any bridge call:
-
-1. If any visible `blog_writer_bridge` tool falls outside the exact four-tool
-   allowlist, stop and report the unexpected tool surface. This includes every
-   cross-role bridge tool — `write_conventions`, `read_source_file`,
-   `write_article_draft`, `finalize_article`, or `publish_article` — and any
-   unknown bridge tool.
-2. If only some of the four topic tools are visible, treat it as a partial matching surface, stop, and report the missing tools.
-3. Only with all four topic tools and no cross-role tools, call the named
-   operations directly from the main session.
-
-Do not delegate to `topic-extractor` in command-scoped mode.
-Never use shell or general filesystem tools to replace a bridge mutation or history operation.
-
-### Custom-agent mode
-
-Use this fallback only when command-scoped mode was not selected. No `blog_writer_bridge` tool is visible in the main session.
-Delegate only to `topic-extractor`. Give it bounded operations; it returns
-concise structured results and never owns the conversation. If any bridge tool
-is visible without the exact topic surface, stop instead of falling back.
-
-For each bridge operation below, run it through the selected mode: call it
-directly in command-scoped mode, or delegate that same bounded operation in
-custom-agent mode.
+Missing, partial, or unexpected bridge catalogs stop the workflow before any
+bridge call. Report missing or unexpected operations and applicable setup:
+Node.js 20+, Git, `npm install --prefix codex-bridge`, project trust, and a Codex
+restart so project MCP configuration is loaded. Do not silently switch modes.
+Never use shell or general filesystem tools to replace a bridge mutation,
+history operation, or bounded source fact-check. There is no custom-agent
+fallback. Tool availability never grants overwrite, finalization, or publication
+approval.
 
 ## Workflow data root
 

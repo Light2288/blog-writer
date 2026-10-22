@@ -9,10 +9,42 @@ Interview the user and maintain `<workflow-root>/CONVENTIONS.md`. Never edit
 `<workflow-root>/CONVENTIONS.template.md`; it is the pristine starter. Only
 the matching bridge operation may persist the assembled conventions.
 
-Delegate only to `conventions-writer`. The main chat owns every user question,
-answer interpretation, conflict resolution, overwrite choice, and final review.
-Never ask a custom agent to question the user. The custom agent only calls
-`write_conventions` with content already assembled in the main chat.
+The main chat owns every user question, answer interpretation, conflict
+resolution, overwrite choice, and final review. Call `write_conventions`
+directly with the complete document assembled in this chat.
+
+## Execution modes
+
+Resolve the complete canonical bridge catalog before any workflow operation.
+Choose conventions-only mode only when explicitly selected for this run;
+otherwise choose desktop mode.
+
+### Desktop mode
+
+Use this mode in an ordinary project chat. The canonical `blog_writer_bridge`
+must expose exactly these nine operations:
+
+`discover_projects`, `collect_activity`, `write_topic_draft`, `finalize_topics`,
+`write_conventions`, `read_source_file`, `write_article_draft`,
+`finalize_article`, `publish_article`.
+
+Known operations for other workflows are valid members of this desktop catalog.
+Call only this skill's matching operations, directly from the main chat.
+Unrelated MCP servers are outside this catalog check.
+
+### Conventions-only mode
+
+Require exactly `write_conventions` and no other canonical bridge operation.
+Call it directly from the main chat. Reject the desktop catalog in this mode.
+
+Missing, partial, or unexpected bridge catalogs stop the workflow before any
+bridge call. Report missing or unexpected operations and applicable setup:
+Node.js 20+, Git, `npm install --prefix codex-bridge`, project trust, and a Codex
+restart so project MCP configuration is loaded. Do not silently switch modes.
+Never use shell or general filesystem tools to replace a bridge mutation,
+history operation, or bounded source fact-check. There is no custom-agent
+fallback. Tool availability never grants overwrite, finalization, or publication
+approval.
 
 ## Workflow data root
 
@@ -29,8 +61,8 @@ root.
 ## Placeholder and structure rules
 
 The canonical unfilled marker is `<!-- TODO: ... -->`. A section is unfilled
-when its only content is one or more such markers. A file whose eight sections
-are all unfilled is placeholder-only and is not usable for article drafting.
+when its only content is one or more such markers. A file with no real guidance is placeholder-only, even if it contains only
+one marker or incomplete sections, and is not usable for article drafting.
 
 Keep these headings in this order:
 
@@ -91,10 +123,10 @@ in the main chat and record the resolution in every affected section.
 ### 3. Persist each reviewed answer
 
 After each answer, assemble the complete updated document while preserving all
-unmodified sections, then delegate `write_conventions` with that complete
+unmodified sections, then call `write_conventions` directly with that complete
 content and the approved overwrite flag. The user's answer authorizes that
 section's content; the create-and-repeated-update approval from step 1 is still
-required before any persistence. Never delegate a partial section, invent
+required before any persistence. Never persist a partial section, invent
 answers, or use a general file-writing tool. Return to step 2 after the write
 succeeds.
 
@@ -103,5 +135,5 @@ succeeds.
 Ask a short final review question listing filled and intentionally unfilled
 sections and pointing to `<workflow-root>/CONVENTIONS.md`. Never embed the file
 body or large markdown in the question. Apply requested changes in memory,
-delegate the next `write_conventions` with approved overwrite, and re-ask. The
-custom agent never conducts the interview or final review.
+call the next `write_conventions` directly with approved overwrite, and re-ask. The
+main chat conducts the interview and final review.
