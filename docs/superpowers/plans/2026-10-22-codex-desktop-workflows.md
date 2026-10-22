@@ -118,9 +118,9 @@ The security concern is broader parent-session exposure of existing privileged o
 - [x] Document dependency installation, project trust, restart, catalog inspection, and supported prompts. Explain that explicit publication updates the ledger; manual moves do not.
 - [x] Refresh the architecture map to include both runtimes, bridge profiles, primary-checkout data resolution, and current test topology.
 - [x] Run `bash tests/run_all.sh`; expect `SUITE PASSED`. Confirm the implementation diff contains no OpenCode or real workflow-data changes.
-- [ ] Perform independent specification review followed by quality review using `personal-workflows:code-review`. Address findings and rerun affected checks.
+- [x] Perform independent specification review followed by quality review using `personal-workflows:code-review`. Address findings and rerun affected checks.
 - [x] Commit as `docs: document direct Codex desktop workflows`.
-- [ ] Report commits, verification results, and any outstanding desktop smoke check. After a desktop restart, confirm the nine tools and a reviewed fixture operation in an ordinary project chat before claiming desktop verification.
+- [x] Report commits, verification results, and any outstanding desktop smoke check. After a desktop restart, confirm the nine tools and a reviewed fixture operation in an ordinary project chat before claiming desktop verification.
 
 
 ## Acceptance Traceability
@@ -138,3 +138,37 @@ The security concern is broader parent-session exposure of existing privileged o
 ## Assumptions and Approval State
 
 No article authoring, workflow-data migration, manual-move reconciliation, or deployment is included. Existing publication behavior remains unchanged. Explicit user approval is recorded above; implementation uses Default mode.
+
+## Implementation and Verification Outcome — 2026-10-23
+
+Implemented on `feat/codex-desktop-workflows` in the existing checkout. No push,
+merge, worktree creation, OpenCode change, or real workflow-data mutation.
+Implementation commits: `a58b93a`, `f1c0755`, `1be9b8b`, `fd8c426`, `82d03ef`,
+and `f3d98c8` (plus this verification record).
+
+- `bash tests/run_all.sh`: exit 0, `SUITE PASSED`; includes 97 bridge tests and
+  22 protocol fixtures, scaffold, launcher, and cross-runtime acceptance checks.
+- `CODEX_ACCEPTANCE_RUNTIME=1 bash tests/codex_live_check.sh`: exit 0. Actual
+  app-server desktop topic, conventions, and article calls produced exact fixture
+  bytes on parent `01a165ff-e875-7fe0-83e5-4e879d8f30fd`; narrow topic/writer
+  catalogs and fixture effects passed; configured read-only sandbox denied the
+  direct write. DRAFT probes left publication and its ledger untouched.
+- Independent specification review: PASS. Sequential quality review: no Important
+  findings. Both verified the same immutable package SHA-256
+  `a4cec388852a0fecada35b0adea5b70a9e8d4650990c4229c061d0682bf713d2`.
+- This ordinary desktop parent exposed all nine tools and successfully performed
+  a bounded read. A **desktop restart and reviewed write smoke test remains
+  outstanding**, as does a full human-led editorial conversation. App-server
+  transport fixtures do not prove those UI/editorial observations.
+
+Ruling: the direct-write sandbox test uses app-server `command/exec` with no
+sandbox override because the model claimed denial without issuing a command.
+This provides an actual rejection; command API and model shell behavior could
+still differ.
+
+Deferred minor: narrow live-probe prompts should explicitly select
+launcher-equivalent command-scoped mode and supply the trusted workflow root,
+with a deterministic prompt assertion. The production launcher already supplies
+both; current narrow live evidence proves catalogs and effects rather than its
+complete prompt-routing contract. Recorded under the native execution
+workflow's Minor-finding policy.
