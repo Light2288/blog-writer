@@ -17,17 +17,21 @@ const EXPECTED_PROFILE_TOOL_NAMES = {
     'finalize_article',
     'publish_article',
   ],
+  desktop: ['discover_projects', 'collect_activity', 'write_topic_draft',
+    'finalize_topics', 'write_conventions', 'read_source_file',
+    'write_article_draft', 'finalize_article', 'publish_article'],
 };
 
 test('parseProfile_accepts_exact_profiles', () => {
   assert.equal(parseProfile(['--profile', 'topic']), 'topic');
   assert.equal(parseProfile(['--profile', 'conventions']), 'conventions');
   assert.equal(parseProfile(['--profile', 'writer']), 'writer');
+  assert.equal(parseProfile(['--profile', 'desktop']), 'desktop');
 });
 
 test('parseProfile_rejects_missing_or_unknown_profile', () => {
   const expectedMessage =
-    'Expected exactly one --profile value: topic, conventions, writer';
+    'Expected exactly one --profile value: topic, conventions, writer, desktop';
 
   assert.throws(() => parseProfile([]), { message: expectedMessage });
   assert.throws(() => parseProfile(['--profile', 'admin']), {

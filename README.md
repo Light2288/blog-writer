@@ -36,9 +36,9 @@ npm install --prefix codex-bridge
 ```
 
 Open the repository in Codex CLI or Codex desktop, trust the project when
-prompted, and restart Codex after changing `.codex/config.toml`, a custom-agent
-file, or a repository skill. Project trust is required before Codex loads the
-read-only configuration and role-scoped MCP servers.
+prompted, and restart Codex after changing `.codex/config.toml` or a repository
+skill. Project trust is required before Codex loads the read-only configuration
+and the project bridge. Node.js must be on the desktop app’s `PATH` as well.
 
 ## Directory layout
 
@@ -51,8 +51,8 @@ read-only configuration and role-scoped MCP servers.
 | `tracked-projects.txt` | Optional allowlist of project directories         |
 | `.opencode/`         | OpenCode agents, skills, and permission config      |
 | `.agents/skills/`    | Codex repository skills                            |
-| `.codex/`            | Codex read-only config and role-scoped custom agents |
-| `codex-bridge/`      | Local profiled MCP bridge used by Codex agents      |
+| `.codex/`            | Codex read-only config and desktop MCP registration |
+| `codex-bridge/`      | Local bounded MCP bridge used by the Codex main chat      |
 
 ## Using OpenCode
 
@@ -94,7 +94,48 @@ never edits source projects and never commits or pushes.
 
 ## Using Codex
 
-### Reliable command-scoped path
+### Direct desktop workflows
+
+Open this repository as a trusted project, install the dependency above, and
+restart Codex. In an ordinary project chat, use:
+
+```text
+Use extract-topics to find topics from last week.
+Use author-conventions to update my writing conventions.
+Use write-blog-article to draft topic 1 from inputs/topics-YYYY-MM-DD.md.
+```
+
+All three skills run directly in the same main chat. It owns project
+confirmation, topic review, the conventions interview, English approval before
+Italian translation, bilingual review, finalization, and explicit publication.
+Use a concrete topics filename when selecting an article. Without one, the
+writer reads the most recent `inputs/topics-*.md` and asks for clarification if
+the file or numbered topic is missing.
+
+Inspect the `blog_writer_bridge` tool catalog before the first workflow. The
+project registration must expose exactly these nine operations:
+
+```text
+discover_projects, collect_activity, write_topic_draft, finalize_topics,
+write_conventions, read_source_file, write_article_draft,
+finalize_article, publish_article
+```
+
+Each skill calls only its own workflow operations. Tool availability does not
+approve finalization, overwriting, or publication. Article finalization does not
+publish. An explicit `publish <slug>` instruction moves the finalized article
+and updates `inputs/published-topics.md` through the validated bridge handler.
+Manual file moves do not update the ledger; no watcher reconciles them.
+
+If tools are missing, partial, or unexpected, stop the workflow. Check Node.js
+20+ on the app’s `PATH`, run `npm install --prefix codex-bridge`, trust the
+project, and restart Codex. Inspect MCP startup errors and the catalog again.
+A narrow catalog in an ordinary chat can indicate a launcher override or stale
+session: open an ordinary project chat after restart. There is no custom-agent
+fallback; shell and file tools cannot substitute for bridge history, source
+fact checks, or mutations. No global Codex configuration changes are required.
+
+### Command-scoped CLI compatibility
 
 Install the bridge dependency, then run each reviewed workflow from the
 repository:
@@ -132,19 +173,11 @@ local prerequisite error. Invalid subcommands and a missing article subject
 print usage before Codex starts. Model or service failures keep Codex's exit
 status; the launcher never silently changes models.
 
-### Conditional custom-agent path
-
-An ordinary trusted Desktop or CLI chat can still invoke `extract-topics` or
-`write-blog-article` in natural language when that runtime correctly propagates
-the custom agent's MCP configuration. Current runtimes may omit those tools,
-which is why this path is conditional and the command-scoped launcher is the
-reliable path. The main chat still owns every question and approval; bounded
-work is delegated only to `topic-extractor`, `blog-writer`, or
-`conventions-writer`.
-
-The main session and custom agents remain read-only. All intended writes pass
-through one local MCP bridge whose `topic`, `writer`, and `conventions`
-profiles expose different fixed tool lists.
+The main session remains read-only for ordinary shell and filesystem access.
+The project’s `desktop` bridge combines the three existing narrow profiles.
+The launcher replaces the canonical server command and complete argument array
+with the selected `topic` or `writer` profile; `conventions` remains available
+as a one-operation profile. No narrow profile gains cross-workflow tools.
 The bridge has no general shell tool, arbitrary-path file tool, or
 caller-supplied project root.
 
@@ -190,7 +223,7 @@ bash tests/blog_writer_check.sh       # step 04 blog-writer + write-blog-article
 bash tests/acceptance_check.sh        # step 05 system-wide static + coverage
 bash tests/permission_check.sh        # step 05 permission/destructive-command denial
 bash tests/redaction_check.sh         # step 05 deterministic redaction/flagging
-bash tests/codex_scaffold_check.sh    # Codex skills, agents, and read-only config
+bash tests/codex_scaffold_check.sh    # Codex skills, desktop routing, and read-only config
 bash tests/codex_launcher_check.sh    # command validation and fixed MCP argv
 npm test --prefix codex-bridge        # synthetic bridge unit/integration tests
 bash tests/codex_acceptance_check.sh  # cross-runtime deterministic acceptance
@@ -204,11 +237,21 @@ and never invokes a model. The live Codex verifier is separate and opt-in:
 CODEX_ACCEPTANCE_RUNTIME=1 bash tests/codex_live_check.sh
 ```
 
-It consumes model calls. Its command-scoped topic and writer probes are the
-acceptance gate; custom-agent propagation is reported separately as diagnostic
-evidence. All write and boundary probes run only in a temporary fixture project
-with an isolated `CODEX_HOME`; the default command without the environment
-variable reports `SKIP` and exits successfully.
+It consumes model calls. The app-server probe loads the actual trusted project
+registration without MCP overrides and invokes all three skills on one parent
+chat. It requires correlated catalogs, successful tool calls with exact
+arguments, and exact fixture bytes. Separate topic and writer probes check
+narrow CLI compatibility. The direct-write probe requires an actual sandbox
+rejection. All probes use a temporary project, isolated `CODEX_HOME` and `HOME`,
+and synthetic history. The default command reports `SKIP` and exits successfully.
+Unavailable authentication or unsupported protocol evidence is reported as
+`NEEDS_CONTEXT` (exit 2), not a pass; observed violations fail (exit 1).
+
+These checks do not replace a **desktop restart and smoke test**. After restart,
+confirm the nine tools in an ordinary project chat and perform a reviewed DRAFT
+operation in a disposable fixture checkout. Neither static checks nor assistant
+claims prove desktop success. The app-server fixture exercises transport and
+persistence; the conversational approval sequence still needs a human review.
 
 The permission-boundary and destructive-command scenarios can additionally be
 proven against the live runtime (opt-in, consumes model calls):
@@ -273,8 +316,11 @@ the narrow allow/deny rules last when editing `.opencode/opencode.json`.
 
 ## Codex configuration and permissions
 
-`.codex/config.toml` keeps the main Codex session read-only and enables custom
-agents without registering privileged bridge tools globally. Each file under
-`.codex/agents/` starts exactly one bridge profile and also uses a read-only
-sandbox. Trust and restart Codex after configuration changes so discovery and
-the MCP registrations are refreshed.
+`.codex/config.toml` keeps the main Codex session read-only and registers
+`blog_writer_bridge` with the fixed `desktop` profile. A fixed `/bin/sh`
+bootstrap resolves the code root with `git rev-parse --show-toplevel`, then
+executes Node.js. It works from nested folders and checkout paths containing
+spaces; it does not expose a shell tool. MCP `cwd` is unset. Workflow data uses
+the Git primary checkout even when bridge code runs from a linked worktree.
+Trust and restart Codex after configuration changes so registration and skill
+discovery are refreshed.

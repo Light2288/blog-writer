@@ -1,8 +1,5 @@
 sandbox_mode = "read-only"
 
-[features]
-multi_agent = true
-
-[agents]
-max_threads = 3
-max_depth = 1
+[mcp_servers.blog_writer_bridge]
+command = "/bin/sh"
+args = ["-c", "set -eu; bridge_code_root=$(git rev-parse --show-toplevel); exec node \"$bridge_code_root/codex-bridge/src/server.mjs\" --profile desktop"]

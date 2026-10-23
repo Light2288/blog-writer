@@ -50,31 +50,37 @@ Do not change OpenCode behavior when working on the Codex path.
 
 Codex loads three repository skills from `.agents/skills/`:
 
-- `extract-topics` coordinates topic discovery, project confirmation,
-  synthesis, DRAFT review, and final approval; it delegates only bounded
-  history and topic operations to the `topic-extractor` custom agent.
-- `author-conventions` conducts the focused interview and final review in the
-  main chat; it delegates only persistence to `conventions-writer`.
-- `write-blog-article` owns topic resolution, English-first writing,
-  translation, and every approval gate in the main chat; it delegates only
-  bounded fact checks and article mutations to `blog-writer`.
+- `extract-topics` owns discovery, project confirmation, synthesis, DRAFT
+  review, and final approval; it calls bounded topic operations directly.
+- `author-conventions` owns the interview and final review; it persists approved
+  changes directly through `write_conventions`.
+- `write-blog-article` owns topic resolution, source fact checks, English-first
+  writing, translation, and every approval gate; it calls bounded article
+  operations directly.
 
-The main Codex session and all three custom agents run with a read-only
-sandbox. `.codex/config.toml` enables multi-agent behavior but intentionally
-registers no privileged MCP bridge. Each standalone file under
-`.codex/agents/` registers exactly one `node codex-bridge/src/server.mjs
---profile <role>` server and may use only that matching profile. Custom agents
-never question the user; they return concise structured results to the main
-chat.
+All three skills run in the main chat. `.codex/config.toml` keeps ordinary shell
+and filesystem access read-only and registers one fixed `desktop` bridge with
+exactly nine operations: `discover_projects`, `collect_activity`,
+`write_topic_draft`, `finalize_topics`, `write_conventions`, `read_source_file`,
+`write_article_draft`, `finalize_article`, and `publish_article`.
+The fixed startup bootstrap finds the code root through Git; MCP `cwd` is unset.
+There are no project custom-agent definitions or delegation fallback.
+
+Explicit launcher command mode replaces that registration with exactly the
+selected narrow `topic` or `writer` catalog. The `conventions`-only profile
+remains available. Validate the selected catalog before any bridge operation;
+ignore unrelated MCP servers. Missing, partial, unexpected, or mismatched
+catalogs require dependency/trust/restart guidance, never a shell substitute.
 
 When Codex code runs from a linked worktree, that worktree is only the code
 root. Resolve the Git common directory and use its primary checkout as the
 workflow data root for `CONVENTIONS.md`, `tracked-projects.txt`, `inputs/`,
 `drafts/`, and `published/`.
 
-All intended Codex writes pass through narrow bridge operations. Never add a
+All intended Codex writes pass through bounded bridge operations. Explicit
+publication updates the ledger; manual file moves do not. Never add a
 general shell, arbitrary file tool, caller-supplied project root, or cross-role
-profile access.
+access in a narrow profile.
 
 See `README.md` for runtime invocation and verification, and
 `CONVENTIONS.md` for the actual writing style.

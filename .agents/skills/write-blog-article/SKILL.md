@@ -12,46 +12,42 @@ only through explicit approval gates.
 
 The main chat owns every user question, topic/slug choice, English review,
 bilingual review, overwrite choice, finalization approval, and publication
-command. Never ask a custom agent to question the user.
+command. All workflow operations run directly in this chat.
 
 ## Execution modes
 
-Choose exactly one mode before loading conventions. The launcher prompt selects
-command-scoped mode explicitly; tool visibility alone does not.
+Resolve the complete canonical bridge catalog before any workflow operation.
+Choose command-scoped mode only when explicitly selected by the launcher;
+otherwise choose desktop mode.
+
+### Desktop mode
+
+Use this mode in an ordinary project chat. The canonical `blog_writer_bridge`
+must expose exactly these nine operations:
+
+`discover_projects`, `collect_activity`, `write_topic_draft`, `finalize_topics`,
+`write_conventions`, `read_source_file`, `write_article_draft`,
+`finalize_article`, `publish_article`.
+
+Known operations for other workflows are valid members of this desktop catalog.
+Call only this skill's matching operations, directly from the main chat.
+Unrelated MCP servers are outside this catalog check.
 
 ### Command-scoped mode
 
-Use this mode only when the launcher selected it and the main session can call
-exactly these four bridge tools: `read_source_file`, `write_article_draft`, `finalize_article`, and `publish_article`.
+Require the exact four-tool writer catalog: `read_source_file`,
+`write_article_draft`, `finalize_article`, and `publish_article`. Reject every
+other bridge operation, including the wider desktop catalog, before any call.
+Call the matching operations directly from the main chat.
 
-Apply this decision order before any bridge call:
-
-1. If any visible `blog_writer_bridge` tool falls outside the exact four-tool
-   allowlist, stop and report the unexpected tool surface. This includes every
-   cross-role bridge tool — `discover_projects`, `collect_activity`,
-   `write_topic_draft`, `finalize_topics`, or `write_conventions` — and any
-   unknown bridge tool.
-2. If only some of the four writer tools are visible, treat it as a partial matching surface, stop, and report the missing tools.
-3. Only with all four writer tools and no cross-role tools, call the named
-   operations directly from the main session.
-
-Do not delegate to `blog-writer` in command-scoped mode.
-Never use shell or general filesystem tools to replace a bridge fact check or mutation.
-
-### Custom-agent mode
-
-Use this fallback only when command-scoped mode was not selected. No `blog_writer_bridge` tool is visible in the main session.
-Delegate only to `blog-writer`. Delegate only bounded fact checks and the
-`write_article_draft`, `finalize_article`, and `publish_article` mutations. The
-agent returns concise structured results and never owns the conversation. If
-any bridge tool is visible without the exact writer surface, stop instead of
-falling back.
-
-For each bridge operation below, run it through the selected mode: call it
-directly in command-scoped mode, or delegate that same bounded operation in
-custom-agent mode.
-
-Never edit a source project, Codex history, or Git state. Never commit or push.
+Missing, partial, or unexpected bridge catalogs stop the workflow before any
+bridge call. Report missing or unexpected operations and applicable setup:
+Node.js 20+, Git, `npm install --prefix codex-bridge`, project trust, and a Codex
+restart so project MCP configuration is loaded. Do not silently switch modes.
+Never use shell or general filesystem tools to replace a bridge mutation,
+history operation, or bounded source fact-check. There is no custom-agent
+fallback. Tool availability never grants overwrite, finalization, or publication
+approval.
 
 ## Workflow data root
 
@@ -75,8 +71,9 @@ Follow these nine steps in order.
 ### 1. Load and validate conventions
 
 Read `<workflow-root>/CONVENTIONS.md` every run. It is missing when absent or
-placeholder-only: all eight sections contain only `<!-- TODO: ... -->` or
-legacy `_Placeholder_` markers and no real guidance. If missing, ask in the
+placeholder-only: it contains no real writing guidance, including a single
+`<!-- TODO: ... -->` or legacy `_Placeholder_` marker, or incomplete sections
+containing only such markers. If missing, ask in the
 main chat for the user to run `author-conventions` and refuse to draft. Never
 invent voice, structure, tag vocabulary, taboos, or bilingual policy.
 
@@ -106,7 +103,7 @@ exists in `<workflow-root>/drafts/`, ask before overwriting and pass
 If `<workflow-root>/published/<slug>.mdx` already exists, stop safely before
 drafting or finalizing. Published-slug replacement is unsupported. Ask the
 user to choose a new slug or handle replacement outside this workflow. Never
-tell the custom agent to bypass the bridge or imply that draft overwrite
+bypass the bridge or imply that draft overwrite
 approval can replace a published article.
 
 ### 4. Draft the English body first

@@ -148,16 +148,13 @@ for path in \
   .agents/skills/extract-topics/SKILL.md \
   .agents/skills/author-conventions/SKILL.md \
   .agents/skills/write-blog-article/SKILL.md \
-  .codex/agents/topic-extractor.toml \
-  .codex/agents/conventions-writer.toml \
-  .codex/agents/blog-writer.toml \
   .codex/config.toml; do
   assert_file "$path"
 done
 assert_contains .codex/config.toml 'sandbox_mode = "read-only"' \
   "Codex main session is read-only"
-assert_absent .codex/config.toml '[mcp_servers' \
-  "Codex main session has no privileged bridge registration"
+assert_contains .codex/config.toml '[mcp_servers.blog_writer_bridge]' \
+  "Codex main session registers the bounded desktop bridge"
 
 if node --input-type=module <<'NODE'
 import assert from 'node:assert/strict';
@@ -309,37 +306,15 @@ assert_contains "$LIVE_CHECK" 'mktemp -d' \
   "live Codex checks create an isolated fixture project"
 assert_contains "$LIVE_CHECK" 'CODEX_HOME' \
   "live Codex checks isolate Codex history"
-assert_contains "$LIVE_CHECK" 'verify_agent_events' \
-  "live Codex checks validate structured agent events"
-assert_contains "$LIVE_CHECK" 'skill_name' \
-  "live Codex checks require structured repository-skill identity"
-assert_contains "$LIVE_CHECK" 'candidate_child_ids' \
-  "live Codex checks evaluate one correlated child identity at a time"
-assert_contains "$LIVE_CHECK" 'mcp_tool_call' \
-  "live Codex checks require structured MCP tool-call evidence"
-assert_contains "$LIVE_CHECK" 'surface == profile_tools' \
-  "live Codex checks require an exact per-role tool catalog"
-assert_contains "$LIVE_CHECK" 'cross_role_tool' \
-  "live Codex checks require structured cross-role isolation evidence"
-for cross_probe in \
-  'Cross-role convention probe' \
-  'cross-role-article' \
-  '2099-01-04'; do
-  assert_contains "$LIVE_CHECK" "$cross_probe" \
-    "live Codex cross-role probe uses valid arguments: $cross_probe"
+assert_file tests/codex_runtime_probe.py
+for contract in 'mcpServerStatus/list' 'thread/start' 'turn/start' 'mcpToolCall' 'normalize_app_server_events'; do
+  assert_contains tests/codex_runtime_probe.py "$contract" "app-server probe records $contract"
 done
-for contract in \
-  'extract-topics:topic-extractor:write_topic_draft' \
-  'author-conventions:conventions-writer:write_conventions' \
-  'write-blog-article:blog-writer:write_article_draft'; do
-  assert_contains "$LIVE_CHECK" "$contract" \
-    "live Codex checks exercise custom-agent contract $contract"
-done
-assert_absent "$LIVE_CHECK" 'grep -qF -- "$name" "$DISCOVERY_OUTPUT"' \
-  "live Codex discovery never treats assistant prose as evidence"
+assert_contains "$LIVE_CHECK" 'desktop' "live verifier exercises desktop configuration"
+assert_absent "$LIVE_CHECK" 'verify_agent_events' "obsolete custom-agent verifier removed"
 assert_file tests/codex_live_events_check.py
 if python3 tests/codex_live_events_check.py; then
-  pass "offline structured-event fixtures enforce single-child live evidence"
+  pass "offline structured-event fixtures enforce parent-session live evidence"
 else
   fail "offline structured-event fixtures reject live-event correlation behavior"
 fi
@@ -393,22 +368,12 @@ assert_absent tests/run_all.sh 'tests/codex_live_check.sh' \
   "default suite still excludes live Codex checks"
 
 for skill in .agents/skills/extract-topics/SKILL.md .agents/skills/write-blog-article/SKILL.md; do
-  assert_contains "$skill" '### Command-scoped mode' \
-    "$skill documents command-scoped execution"
-  assert_contains "$skill" '### Custom-agent mode' \
-    "$skill preserves custom-agent fallback"
-  assert_contains "$skill" 'partial matching surface' \
-    "$skill fails closed on partial bridge exposure"
-  assert_contains "$skill" 'cross-role bridge tool' \
-    "$skill fails closed on cross-role bridge exposure"
+  assert_contains "$skill" '### Command-scoped mode' "$skill retains narrow mode"
+  assert_contains "$skill" '### Desktop mode' "$skill supports direct desktop routing"
+  assert_contains "$skill" 'Missing, partial, or unexpected' "$skill rejects invalid catalogs"
 done
-
-assert_contains "$LIVE_CHECK" 'verify_command_events' \
-  "live Codex checks verify structured main-session events"
-assert_contains "$LIVE_CHECK" 'CODEX_LIVE_COMMAND_EVENT_FIXTURE' \
-  "main-session event verification has offline fixtures"
-assert_contains "$LIVE_CHECK" 'custom-agent MCP propagation remains diagnostic' \
-  "custom-agent propagation is explicitly non-gating"
+assert_contains "$LIVE_CHECK" 'verify_command_events' "live verifier checks parent-session evidence"
+assert_contains "$LIVE_CHECK" 'CODEX_LIVE_COMMAND_EVENT_FIXTURE' "parent-session verifier has offline fixtures"
 
 for doc in README.md docs/acceptance.md; do
   assert_contains "$doc" './bin/blog-writer-codex topics "last week"' \
@@ -417,13 +382,23 @@ for doc in README.md docs/acceptance.md; do
     "$doc documents the reliable article command"
   assert_contains "$doc" '--no-daemon' \
     "$doc documents daemon isolation"
-  assert_contains_ci "$doc" 'custom-agent' \
-    "$doc documents the conditional custom-agent path"
-  assert_contains_ci "$doc" 'diagnostic' \
-    "$doc labels custom-agent live evidence as diagnostic"
+  assert_contains_ci "$doc" 'desktop' \
+    "$doc documents direct desktop invocation"
   assert_contains_ci "$doc" 'does not publish' \
     "$doc keeps finalization separate from publication"
+  assert_contains "$doc" 'Use extract-topics to find topics from last week.' \
+    "$doc provides a direct desktop prompt"
+  assert_contains "$doc" 'nine' "$doc documents the desktop catalog size"
+  assert_contains_ci "$doc" 'manual file moves' "$doc explains manual publication bookkeeping"
+  assert_contains_ci "$doc" 'desktop restart and smoke test' \
+    "$doc distinguishes desktop verification from app-server evidence"
+  assert_absent "$doc" 'Conditional custom-agent' "$doc removes obsolete fallback guidance"
 done
+
+assert_contains AGENTS.md 'desktop' "project instructions describe desktop bridge routing"
+assert_absent AGENTS.md 'registers no privileged MCP bridge' "project instructions remove obsolete registration claim"
+assert_contains docs/architecture/map.md 'codex-bridge/src/server.mjs' "architecture map includes bridge entrypoint"
+assert_contains docs/architecture/map.md 'tests/codex_runtime_probe.py' "architecture map includes runtime verifier"
 
 echo
 if [ "$FAIL" -eq 0 ]; then

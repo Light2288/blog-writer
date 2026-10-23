@@ -47,6 +47,12 @@ function createProfileHandlers(profile, projectRoot) {
       return createConventionsHandlers({ projectRoot });
     case 'writer':
       return createWriterHandlers({ projectRoot });
+    case 'desktop':
+      return {
+        ...createTopicHandlers({ projectRoot }),
+        ...createConventionsHandlers({ projectRoot }),
+        ...createWriterHandlers({ projectRoot }),
+      };
     default:
       throw new Error(`Unknown bridge profile: ${profile}`);
   }

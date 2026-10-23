@@ -4,9 +4,13 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
+
+# Imported probe helpers must not leave untracked bytecode in the checkout.
+sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parent.parent
 LIVE_CHECK = ROOT / "tests" / "codex_live_check.sh"
@@ -17,6 +21,7 @@ EXPECTED_TOOLS = [
     "write_topic_draft",
     "finalize_topics",
 ]
+DESKTOP_TOOLS = EXPECTED_TOOLS + ["write_conventions", "read_source_file", "write_article_draft", "finalize_article", "publish_article"]
 EXPECTED_ARGUMENTS = {
     "date": "2099-01-03",
     "content": "# Agent fixture topics\n\n| Status | DRAFT |\n",
@@ -41,35 +46,6 @@ def spawn_event(child_id):
             "type": "spawn_agent",
             "agent_type": "topic-extractor",
             "child_thread_id": child_id,
-        },
-    }
-
-
-def catalog_event(child_id, tools=None):
-    return {
-        "type": "item.completed",
-        "thread_id": child_id,
-        "item": {
-            "type": "mcp_tool_catalog",
-            "server": "blog_writer_bridge",
-            "profile": "topic",
-            "available_tools": tools or EXPECTED_TOOLS,
-        },
-    }
-
-
-def call_event(child_id, arguments=None):
-    return {
-        "type": "item.completed",
-        "thread_id": child_id,
-        "item": {
-            "type": "mcp_tool_call",
-            "server": "blog_writer_bridge",
-            "profile": "topic",
-            "name": "write_topic_draft",
-            "arguments": arguments or EXPECTED_ARGUMENTS,
-            "status": "completed",
-            "result": {"isError": False},
         },
     }
 
@@ -104,36 +80,7 @@ def direct_call_event(owner="parent-a", arguments=None, result=None):
 
 
 class LiveEventVerifierTests(unittest.TestCase):
-    def run_verifier(self, events):
-        with tempfile.TemporaryDirectory(prefix="codex-live-events-") as scratch:
-            events_path = Path(scratch) / "events.jsonl"
-            events_path.write_text(
-                "".join(json.dumps(event) + "\n" for event in events),
-                encoding="utf-8",
-            )
-            environment = os.environ.copy()
-            environment["CODEX_LIVE_EVENT_FIXTURE"] = "1"
-            return subprocess.run(
-                [
-                    "bash",
-                    str(LIVE_CHECK),
-                    str(events_path),
-                    "extract-topics",
-                    "topic-extractor",
-                    "topic",
-                    "write_topic_draft",
-                    "date",
-                    "2099-01-03",
-                    json.dumps(EXPECTED_ARGUMENTS, sort_keys=True),
-                ],
-                cwd=ROOT,
-                env=environment,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-
-    def run_command_verifier(self, events):
+    def run_command_verifier(self, events, profile="topic", skill="extract-topics", tool="write_topic_draft", arguments=None):
         with tempfile.TemporaryDirectory(prefix="codex-command-events-") as scratch:
             events_path = Path(scratch) / "events.jsonl"
             events_path.write_text(
@@ -147,10 +94,10 @@ class LiveEventVerifierTests(unittest.TestCase):
                     "bash",
                     str(LIVE_CHECK),
                     str(events_path),
-                    "extract-topics",
-                    "topic",
-                    "write_topic_draft",
-                    json.dumps(EXPECTED_ARGUMENTS, sort_keys=True),
+                    skill,
+                    profile,
+                    tool,
+                    json.dumps(EXPECTED_ARGUMENTS if arguments is None else arguments, sort_keys=True),
                 ],
                 cwd=ROOT,
                 env=environment,
@@ -294,135 +241,109 @@ class LiveEventVerifierTests(unittest.TestCase):
             ]
         )
 
-    def test_accepts_one_child_with_complete_correlated_evidence(self):
-        result = self.run_verifier(
-            [
-                skill_event(),
-                spawn_event("child-a"),
-                catalog_event("child-a"),
-                call_event("child-a"),
-            ]
-        )
 
-        self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_rejects_evidence_split_across_two_matching_children(self):
-        result = self.run_verifier(
-            [
-                skill_event(),
-                spawn_event("child-a"),
-                spawn_event("child-b"),
-                catalog_event("child-a"),
-                call_event("child-b"),
-            ]
-        )
+    def rpc_events(self, tools=None, skill="extract-topics", tool="write_topic_draft", arguments=None):
+        root = str(ROOT)
+        records = []
+        def pair(method, params, result, request_id):
+            records.extend([
+                {"direction":"send", "message":{"id":request_id,"method":method,"params":params}},
+                {"direction":"receive", "message":{"id":request_id,"result":result}},
+            ])
+        pair("thread/start", {"cwd":root}, {"thread":{"id":"parent-a"}}, 1)
+        pair("mcpServerStatus/list", {"threadId":"parent-a","serverName":"blog_writer_bridge"},
+             {"data":[{"name":"blog_writer_bridge","tools":{n:{"name":n} for n in (tools or DESKTOP_TOOLS)}}]}, 2)
+        pair("turn/start", {"threadId":"parent-a","input":[{"type":"skill","name":skill,"path":str(ROOT/'.agents/skills'/skill/'SKILL.md')}]},
+             {"turn":{"id":"turn-a"}}, 3)
+        records.append({"direction":"receive", "message":{"method":"item/completed","params":{
+            "threadId":"parent-a","turnId":"turn-a","item":{"type":"mcpToolCall","id":"call-a",
+            "server":"blog_writer_bridge","tool":tool,"arguments":arguments or EXPECTED_ARGUMENTS,
+            "status":"completed","result":{"isError":False}}}}})
+        return records
 
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("NEEDS_CONTEXT", result.stderr)
+    def test_desktop_accepts_real_protocol_for_each_workflow(self):
+        cases = [
+            ("extract-topics","write_topic_draft",EXPECTED_ARGUMENTS),
+            ("author-conventions","write_conventions",{"content":"# Guidance", "overwrite":False}),
+            ("write-blog-article","write_article_draft",{"slug":"fixture", "content":"draft", "overwrite":False}),
+        ]
+        for skill,tool,arguments in cases:
+            with self.subTest(skill=skill):
+                result = self.run_command_verifier(self.rpc_events(skill=skill,tool=tool,arguments=arguments),
+                    profile="desktop",skill=skill,tool=tool,arguments=arguments)
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertEqual(result.stdout.strip(),"parent-a")
 
-    def test_rejects_split_children_nested_in_one_structured_event(self):
-        nested_catalog = catalog_event("child-a")["item"]
-        nested_catalog["thread_id"] = "child-a"
-        nested_call = call_event("child-b")["item"]
-        nested_call["thread_id"] = "child-b"
-        result = self.run_verifier(
-            [
-                skill_event(),
-                spawn_event("child-a"),
-                {
-                    "type": "items.completed",
-                    "items": [nested_catalog, nested_call],
-                },
-            ]
-        )
+    def test_desktop_three_workflows_share_one_parent_catalog(self):
+        cases = [("extract-topics","write_topic_draft",EXPECTED_ARGUMENTS),
+                 ("author-conventions","write_conventions",{"content":"Guidance","overwrite":False}),
+                 ("write-blog-article","write_article_draft",{"slug":"fixture","content":"draft","overwrite":False})]
+        events = self.rpc_events()[:4]
+        for index,(skill,tool,args) in enumerate(cases):
+            part = self.rpc_events(skill=skill,tool=tool,arguments=args)[4:]
+            part[0]["message"]["id"] = part[1]["message"]["id"] = 3+index
+            part[1]["message"]["result"]["turn"]["id"] = f"turn-{index}"
+            part[2]["message"]["params"]["turnId"] = f"turn-{index}"
+            events.extend(part)
+        for skill,tool,args in cases:
+            result=self.run_command_verifier(events,profile="desktop",skill=skill,tool=tool,arguments=args)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(result.stdout.strip(),"parent-a")
 
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("NEEDS_CONTEXT", result.stderr)
+    def test_fixture_approval_is_limited_to_matching_preapproved_call(self):
+        from codex_runtime_probe import fixture_approval_response
+        request={"method":"mcpServer/elicitation/request","params":{"threadId":"parent-a","turnId":"turn-a",
+            "serverName":"blog_writer_bridge","mode":"form","_meta":{"codex_approval_kind":"mcp_tool_call","tool_params":EXPECTED_ARGUMENTS},
+            "message":'Allow the blog_writer_bridge MCP server to run tool "write_topic_draft"?',
+            "requestedSchema":{"type":"object","properties":{}}}}
+        records=self.rpc_events()[:6]
+        expected=("parent-a","write_topic_draft",EXPECTED_ARGUMENTS)
+        self.assertEqual(fixture_approval_response(request,records,expected),{"action":"accept","content":{}})
+        params=request["params"]
+        for field,value in (("message",'Allow publication?'),("serverName","other"),("threadId","other"),("turnId","other")):
+            previous=params[field];params[field]=value
+            self.assertIsNone(fixture_approval_response(request,records,expected));params[field]=previous
+        params["_meta"]["tool_params"]={}
+        self.assertIsNone(fixture_approval_response(request,records,expected))
+        self.assertIsNone(fixture_approval_response(request,records,None))
 
-    def test_rejects_nested_evidence_with_a_conflicting_envelope_child(self):
-        nested_call = call_event("child-b")["item"]
-        nested_call["thread_id"] = "child-b"
-        result = self.run_verifier(
-            [
-                skill_event(),
-                spawn_event("child-a"),
-                catalog_event("child-a"),
-                {
-                    "type": "item.completed",
-                    "thread_id": "child-a",
-                    "item": nested_call,
-                },
-            ]
-        )
+    def test_protocol_rejects_null_result(self):
+        events=self.rpc_events();events[-1]["message"]["params"]["item"]["result"]=None
+        self.assertNotEqual(self.run_command_verifier(events,profile="desktop").returncode,0)
 
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("NEEDS_CONTEXT", result.stderr)
+    def test_desktop_rejects_partial_extra_or_split_catalog(self):
+        for tools in (DESKTOP_TOOLS[:-1],DESKTOP_TOOLS+["shell"]):
+            result = self.run_command_verifier(self.rpc_events(tools=tools),profile="desktop")
+            self.assertNotEqual(result.returncode,0)
+        events=self.rpc_events()
+        events[3]["message"]["id"]=999
+        self.assertNotEqual(self.run_command_verifier(events,profile="desktop").returncode,0)
 
-    def test_rejects_two_partial_catalogs_whose_union_is_complete(self):
-        result = self.run_verifier(
-            [
-                skill_event(),
-                spawn_event("child-a"),
-                catalog_event("child-a", EXPECTED_TOOLS[:2]),
-                catalog_event("child-a", EXPECTED_TOOLS[2:]),
-                call_event("child-a"),
-            ]
-        )
+    def test_protocol_rejects_calls_from_wrong_thread_or_turn_and_error_results(self):
+        for field,value in (("threadId","other"),("turnId","other")):
+            events=self.rpc_events();events[-1]["message"]["params"][field]=value
+            self.assertNotEqual(self.run_command_verifier(events,profile="desktop").returncode,0)
+        events=self.rpc_events();events[-1]["message"]["params"]["item"]["result"]={"isError":True}
+        self.assertNotEqual(self.run_command_verifier(events,profile="desktop").returncode,0)
 
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("NEEDS_CONTEXT", result.stderr)
+    def test_protocol_requires_acknowledged_skill_and_correct_skill_path(self):
+        for mutate in (lambda e:e[5]["message"].update({"id":999}),
+                       lambda e:e[4]["message"]["params"]["input"][0].update({"path":"/unrelated/SKILL.md"})):
+            events=self.rpc_events();mutate(events)
+            self.assertNotEqual(self.run_command_verifier(events,profile="desktop").returncode,0)
 
-    def test_rejects_exact_catalog_followed_by_unknown_tool_catalog(self):
-        result = self.run_verifier(
-            [
-                skill_event(),
-                spawn_event("child-a"),
-                catalog_event("child-a"),
-                catalog_event(
-                    "child-a",
-                    ["mcp__blog_writer_bridge__unexpected_bridge_tool"],
-                ),
-                call_event("child-a"),
-            ]
-        )
+    def test_narrow_protocol_catalog_rejects_desktop_union(self):
+        result=self.run_command_verifier(self.rpc_events(),profile="topic")
+        self.assertNotEqual(result.returncode,0)
 
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("NEEDS_CONTEXT", result.stderr)
+    def test_command_rejects_two_partial_catalogs_whose_union_is_complete(self):
+        self.assert_command_rejected([skill_event("parent-a"),direct_catalog_event(tools=EXPECTED_TOOLS[:2]),
+                                     direct_catalog_event(tools=EXPECTED_TOOLS[2:]),direct_call_event()])
 
-    def test_rejects_unknown_bare_or_prefixed_catalog_tools(self):
-        for extra_tool in (
-            "unexpected_bridge_tool",
-            "blog-writer-codex-bridge__unexpected_bridge_tool",
-        ):
-            with self.subTest(extra_tool=extra_tool):
-                result = self.run_verifier(
-                    [
-                        skill_event(),
-                        spawn_event("child-a"),
-                        catalog_event("child-a", EXPECTED_TOOLS + [extra_tool]),
-                        call_event("child-a"),
-                    ]
-                )
-
-                self.assertEqual(result.returncode, 2, result.stderr)
-                self.assertIn("NEEDS_CONTEXT", result.stderr)
-
-    def test_rejects_call_arguments_with_the_wrong_sentinel_content(self):
-        wrong_arguments = {
-            **EXPECTED_ARGUMENTS,
-            "content": "# Wrong fixture content\n\n| Status | DRAFT |\n",
-        }
-        result = self.run_verifier(
-            [
-                skill_event(),
-                spawn_event("child-a"),
-                catalog_event("child-a"),
-                call_event("child-a", wrong_arguments),
-            ]
-        )
-
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("NEEDS_CONTEXT", result.stderr)
+    def test_command_rejects_exact_then_changed_catalog(self):
+        self.assert_command_rejected([skill_event("parent-a"),direct_catalog_event(),
+                                     direct_catalog_event(tools=EXPECTED_TOOLS+["shell"]),direct_call_event()])
 
 
 if __name__ == "__main__":
